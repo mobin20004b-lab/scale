@@ -21,6 +21,7 @@ import { Loader2, RefreshCcw, Scan, Plus, TriangleAlert } from "lucide-react";
 import { BarcodeScanner } from "./barcode-scanner";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatScaleWeight } from "@/lib/scale-reading";
 import {
   Empty,
   EmptyContent,
@@ -60,6 +61,9 @@ interface Scale {
   id: string;
   name: string;
   warehouseId: string;
+  tare: number;
+  unit: string;
+  precision: number;
 }
 
 interface StockInFormProps {
@@ -111,7 +115,12 @@ export function StockInForm({
 
   const filteredScales = useMemo(
     () => scales.filter((scale) => scale.warehouseId === selectedWarehouseId),
-    [scales, selectedWarehouseId],
+    [scales, selectedWarehouseId]
+  );
+
+  const selectedScale = useMemo(
+    () => scales.find((scale) => scale.id === selectedScaleId) ?? null,
+    [scales, selectedScaleId]
   );
 
   useEffect(() => {
@@ -286,9 +295,12 @@ export function StockInForm({
           {selectedWarehouseId && filteredScales.length === 0 && (
             <Empty className="p-4">
               <EmptyHeader>
-                <EmptyTitle className="text-base">ترازوی فعالی برای این انبار ثبت نشده است</EmptyTitle>
+                <EmptyTitle className="text-base">
+                  ترازوی فعالی برای این انبار ثبت نشده است
+                </EmptyTitle>
                 <EmptyDescription>
-                  برای ثبت وزن، ابتدا از بخش مدیریت ترازو یک ترازو اضافه یا فعال کنید.
+                  برای ثبت وزن، ابتدا از بخش مدیریت ترازو یک ترازو اضافه یا فعال
+                  کنید.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -301,10 +313,15 @@ export function StockInForm({
               {weightError && (
                 <Empty className="gap-3 border border-destructive/40 bg-destructive/5 p-4">
                   <EmptyHeader className="max-w-full">
-                    <EmptyMedia variant="icon" className="bg-destructive/10 text-destructive">
+                    <EmptyMedia
+                      variant="icon"
+                      className="bg-destructive/10 text-destructive"
+                    >
                       <TriangleAlert className="size-5" />
                     </EmptyMedia>
-                    <EmptyTitle className="text-base">خطا در دریافت وزن ترازو</EmptyTitle>
+                    <EmptyTitle className="text-base">
+                      خطا در دریافت وزن ترازو
+                    </EmptyTitle>
                     <EmptyDescription>{weightError}</EmptyDescription>
                   </EmptyHeader>
                   <EmptyContent>
@@ -324,7 +341,7 @@ export function StockInForm({
                 <div className="text-sm font-medium">
                   وزن زنده:{" "}
                   {liveWeight !== null
-                    ? `${Number(liveWeight).toFixed(2)} گرم`
+                    ? formatScaleWeight(liveWeight, selectedScale ?? {})
                     : "--"}
                 </div>
                 <Button
@@ -344,6 +361,13 @@ export function StockInForm({
                   استفاده از وزن ترازو
                 </Button>
               </div>
+
+              {selectedScale && (
+                <div className="text-xs text-muted-foreground">
+                  تار: {selectedScale.tare} · دقت: {selectedScale.precision} ·
+                  واحد: {selectedScale.unit}
+                </div>
+              )}
             </div>
           )}
 
@@ -358,7 +382,7 @@ export function StockInForm({
                     shouldValidate: true,
                   });
                   const product = products.find(
-                    (p) => p.id.toString() === value,
+                    (p) => p.id.toString() === value
                   );
                   setSelectedProduct(product || null);
                 }}
@@ -368,7 +392,7 @@ export function StockInForm({
                   aria-label="انتخاب محصول"
                   className={cn(
                     errors.productId &&
-                      "border-destructive focus-visible:ring-destructive",
+                      "border-destructive focus-visible:ring-destructive"
                   )}
                 >
                   <SelectValue placeholder="محصول را انتخاب کنید" />
@@ -447,7 +471,7 @@ export function StockInForm({
               aria-invalid={!!errors.quantity}
               className={cn(
                 errors.quantity &&
-                  "border-destructive focus-visible:ring-destructive",
+                  "border-destructive focus-visible:ring-destructive"
               )}
             />
             {errors.quantity && (

@@ -87,17 +87,23 @@ model Warehouse {
 }
 
 model Scale {
-  id           String    @id @default(cuid())
-  name         String
-  apiKey       String    @unique @default(cuid())
-  warehouseId  String
-  lastWeight   Float?
-  lastWeightAt DateTime?
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  warehouse    Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  stockIns     StockIn[]
+  id                   String    @id @default(cuid())
+  name                 String
+  apiKey               String    @unique @default(cuid())
+  warehouseId          String
+  tare                 Float     @default(0)
+  unit                 String    @default("گرم")
+  precision            Int       @default(2)
+  locationNote         String?
+  heartbeatIntervalSec Int       @default(1)
+  lastWeight           Float?
+  lastWeightAt         DateTime?
+  isActive             Boolean   @default(true)
+  archivedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  warehouse            Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stockIns             StockIn[]
 
   @@index([warehouseId])
   @@map("scales")
