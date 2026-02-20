@@ -17,9 +17,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, Scan, Plus } from "lucide-react";
+import { Loader2, RefreshCcw, Scan, Plus, TriangleAlert } from "lucide-react";
 import { BarcodeScanner } from "./barcode-scanner";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 
 const stockInSchema = z.object({
   productId: z.string().min(1, "محصول را انتخاب کنید"),
@@ -72,6 +81,9 @@ export function StockInForm({
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [selectedScaleId, setSelectedScaleId] = useState<string>("");
   const [liveWeight, setLiveWeight] = useState<number | null>(null);
+  const [isFetchingWeight, setIsFetchingWeight] = useState(false);
+  const [weightError, setWeightError] = useState<string | null>(null);
+  const [weightRefreshKey, setWeightRefreshKey] = useState(0);
   const [scannerStatus, setScannerStatus] = useState<
     "idle" | "scanning" | "success" | "error"
   >("idle");
@@ -121,21 +133,48 @@ export function StockInForm({
   useEffect(() => {
     if (!selectedScaleId) {
       setLiveWeight(null);
+      setWeightError(null);
+      setIsFetchingWeight(false);
       return;
     }
 
-    const fetchWeight = async () => {
-      const response = await fetch(`/api/scales/${selectedScaleId}/weight`);
-      if (response.ok) {
+    let cancelled = false;
+
+    const fetchWeight = async ({ initialLoad = false } = {}) => {
+      if (initialLoad) {
+        setIsFetchingWeight(true);
+      }
+
+      try {
+        const response = await fetch(`/api/scales/${selectedScaleId}/weight`);
+        if (!response.ok) {
+          throw new Error();
+        }
+
         const payload = await response.json();
-        setLiveWeight(payload.lastWeight ?? null);
+        if (!cancelled) {
+          setLiveWeight(payload.lastWeight ?? null);
+          setWeightError(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setWeightError("ارتباط با ترازو برقرار نشد. دوباره تلاش کنید.");
+        }
+      } finally {
+        if (!cancelled && initialLoad) {
+          setIsFetchingWeight(false);
+        }
       }
     };
 
-    fetchWeight();
-    const interval = setInterval(fetchWeight, 1000);
-    return () => clearInterval(interval);
-  }, [selectedScaleId]);
+    fetchWeight({ initialLoad: true });
+    const interval = setInterval(() => fetchWeight(), 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [selectedScaleId, weightRefreshKey]);
 
   const handleBarcodeScanned = (barcode: string) => {
     const product = products.find((p) => p.barcode === barcode);
@@ -244,30 +283,67 @@ export function StockInForm({
             </Select>
           </div>
 
+          {selectedWarehouseId && filteredScales.length === 0 && (
+            <Empty className="p-4">
+              <EmptyHeader>
+                <EmptyTitle className="text-base">ترازوی فعالی برای این انبار ثبت نشده است</EmptyTitle>
+                <EmptyDescription>
+                  برای ثبت وزن، ابتدا از بخش مدیریت ترازو یک ترازو اضافه یا فعال کنید.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+
           {selectedScaleId && (
-            <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-between">
-              <div className="text-sm font-medium">
-                وزن زنده:{" "}
-                {liveWeight !== null
-                  ? `${Number(liveWeight).toFixed(2)} گرم`
-                  : "--"}
+            <div className="space-y-3">
+              {isFetchingWeight && <Skeleton className="h-14 w-full" />}
+
+              {weightError && (
+                <Empty className="gap-3 border border-destructive/40 bg-destructive/5 p-4">
+                  <EmptyHeader className="max-w-full">
+                    <EmptyMedia variant="icon" className="bg-destructive/10 text-destructive">
+                      <TriangleAlert className="size-5" />
+                    </EmptyMedia>
+                    <EmptyTitle className="text-base">خطا در دریافت وزن ترازو</EmptyTitle>
+                    <EmptyDescription>{weightError}</EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setWeightRefreshKey((prev) => prev + 1)}
+                    >
+                      <RefreshCcw className="size-4 ml-2" />
+                      تلاش مجدد
+                    </Button>
+                  </EmptyContent>
+                </Empty>
+              )}
+
+              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-between">
+                <div className="text-sm font-medium">
+                  وزن زنده:{" "}
+                  {liveWeight !== null
+                    ? `${Number(liveWeight).toFixed(2)} گرم`
+                    : "--"}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    if (liveWeight !== null) {
+                      setValue("quantity", String(liveWeight), {
+                        shouldDirty: true,
+                        shouldTouch: true,
+                        shouldValidate: true,
+                      });
+                    }
+                  }}
+                >
+                  استفاده از وزن ترازو
+                </Button>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  if (liveWeight !== null) {
-                    setValue("quantity", String(liveWeight), {
-                      shouldDirty: true,
-                      shouldTouch: true,
-                      shouldValidate: true,
-                    });
-                  }
-                }}
-              >
-                استفاده از وزن ترازو
-              </Button>
             </div>
           )}
 

@@ -1,8 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { History } from "lucide-react";
+import { History, Plus } from "lucide-react";
 import { DateTimeText } from "@/components/date-time-text";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import Link from "next/link";
 
 interface StockIn {
   id: string;
@@ -39,9 +41,22 @@ export function StockInList({ stockIns }: StockInListProps) {
         <ScrollArea className="h-[600px] pr-4">
           <div className="space-y-3">
             {stockIns.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                هیچ ورودی ثبت نشده است
-              </p>
+              <Empty className="p-4">
+                <EmptyHeader>
+                  <EmptyTitle className="text-base">هنوز ورودی ثبت نشده است</EmptyTitle>
+                  <EmptyDescription>
+                    با ثبت اولین ورود کالا، تاریخچه این بخش تکمیل می‌شود.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Link href="/dashboard/stock-in" className="inline-flex">
+                    <span className="inline-flex items-center rounded-md border px-3 py-1.5 text-sm">
+                      <Plus className="ml-2 size-4" />
+                      ثبت ورود جدید
+                    </span>
+                  </Link>
+                </EmptyContent>
+              </Empty>
             ) : (
               stockIns.map((stockIn) => (
                 <div

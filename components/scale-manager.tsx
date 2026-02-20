@@ -23,6 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertCircle,
   Check,
   Copy,
   Edit,
@@ -44,6 +45,15 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { DateTimeText } from "@/components/date-time-text";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 
 interface Warehouse {
   id: string;
@@ -87,6 +97,9 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
       { lastWeight: number | null; lastWeightAt: string | Date | null }
     >
   >({});
+  const [isLoadingWeights, setIsLoadingWeights] = useState(false);
+  const [weightsError, setWeightsError] = useState<string | null>(null);
+  const [weightsRefreshKey, setWeightsRefreshKey] = useState(0);
   const [localScales, setLocalScales] = useState(scales);
   const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {},
@@ -123,28 +136,67 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   }, [localScales, search, warehouseFilter, statusFilter]);
 
   useEffect(() => {
-    if (activeScales.length === 0) return;
+    if (activeScales.length === 0) {
+      setLiveWeights({});
+      setWeightsError(null);
+      setIsLoadingWeights(false);
+      return;
+    }
 
-    const fetchWeights = async () => {
-      for (const scale of activeScales) {
-        const response = await fetch(`/api/scales/${scale.id}/weight`);
-        if (response.ok) {
-          const payload = await response.json();
-          setLiveWeights((previous) => ({
-            ...previous,
-            [scale.id]: {
-              lastWeight: payload.lastWeight,
-              lastWeightAt: payload.lastWeightAt,
-            },
-          }));
+    let cancelled = false;
+
+    const fetchWeights = async ({ initialLoad = false } = {}) => {
+      if (initialLoad) {
+        setIsLoadingWeights(true);
+      }
+
+      let hasError = false;
+
+      await Promise.all(
+        activeScales.map(async (scale) => {
+          try {
+            const response = await fetch(`/api/scales/${scale.id}/weight`);
+            if (!response.ok) {
+              hasError = true;
+              return;
+            }
+
+            const payload = await response.json();
+            if (!cancelled) {
+              setLiveWeights((previous) => ({
+                ...previous,
+                [scale.id]: {
+                  lastWeight: payload.lastWeight,
+                  lastWeightAt: payload.lastWeightAt,
+                },
+              }));
+            }
+          } catch {
+            hasError = true;
+          }
+        }),
+      );
+
+      if (!cancelled) {
+        setWeightsError(
+          hasError
+            ? "بخشی از وزن‌های لحظه‌ای قابل دریافت نیست. اتصال شبکه یا وضعیت ترازوها را بررسی کنید."
+            : null,
+        );
+        if (initialLoad) {
+          setIsLoadingWeights(false);
         }
       }
     };
 
-    fetchWeights();
-    const interval = setInterval(fetchWeights, 1000);
-    return () => clearInterval(interval);
-  }, [activeScales]);
+    fetchWeights({ initialLoad: true });
+    const interval = setInterval(() => fetchWeights(), 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeScales, weightsRefreshKey]);
 
   const submitScale = async () => {
     try {
@@ -482,10 +534,57 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           );
         })}
 
-        {visibleScales.length === 0 && (
-          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            هیچ ترازویی با این فیلترها پیدا نشد.
+        {isLoadingWeights && activeScales.length > 0 && (
+          <div className="space-y-2">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
           </div>
+        )}
+
+        {weightsError && (
+          <Empty className="border border-amber-500/40 bg-amber-500/5 p-4 md:p-5">
+            <EmptyHeader className="max-w-full">
+              <EmptyMedia variant="icon" className="bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <AlertCircle className="size-5" />
+              </EmptyMedia>
+              <EmptyTitle className="text-base">دریافت وزن لحظه‌ای با خطا مواجه شد</EmptyTitle>
+              <EmptyDescription>{weightsError}</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setWeightsRefreshKey((prev) => prev + 1)}
+              >
+                <RefreshCw className="size-4 ml-2" />
+                تلاش مجدد دریافت وزن
+              </Button>
+            </EmptyContent>
+          </Empty>
+        )}
+
+        {visibleScales.length === 0 && (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>هیچ ترازویی پیدا نشد</EmptyTitle>
+              <EmptyDescription>
+                فیلترها را تغییر دهید یا یک ترازو جدید اضافه کنید.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setSearch("");
+                  setWarehouseFilter("all");
+                  setStatusFilter("all");
+                }}
+              >
+                پاک کردن فیلترها
+              </Button>
+            </EmptyContent>
+          </Empty>
         )}
       </CardContent>
     </Card>

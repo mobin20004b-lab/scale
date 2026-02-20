@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react"
 import { Html5Qrcode } from "html5-qrcode"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { X, Camera, CheckCircle2 } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { X, Camera, CheckCircle2, RefreshCw, TriangleAlert } from "lucide-react"
 
 interface BarcodeScannerProps {
   onScan: (code: string) => void
@@ -16,6 +18,7 @@ export function BarcodeScanner({ onScan, onStatusChange }: BarcodeScannerProps) 
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null)
+  const [isStarting, setIsStarting] = useState(false)
 
   useEffect(() => {
     return () => {
@@ -27,6 +30,7 @@ export function BarcodeScanner({ onScan, onStatusChange }: BarcodeScannerProps) 
 
   const startScanning = async () => {
     try {
+      setIsStarting(true)
       setError(null)
       onStatusChange?.("scanning")
       const scanner = new Html5Qrcode("qr-reader")
@@ -54,6 +58,8 @@ export function BarcodeScanner({ onScan, onStatusChange }: BarcodeScannerProps) 
       console.error('[v0] Error starting scanner:', err)
       setError("خطا در دسترسی به دوربین. لطفا دسترسی را بررسی کنید.")
       onStatusChange?.("error")
+    } finally {
+      setIsStarting(false)
     }
   }
 
@@ -79,12 +85,19 @@ export function BarcodeScanner({ onScan, onStatusChange }: BarcodeScannerProps) 
             onClick={startScanning}
             className="w-full"
             aria-label="شروع اسکن بارکد"
+            disabled={isStarting}
+            aria-busy={isStarting}
           >
-            <Camera className="ml-2 size-4" />
+            {isStarting ? (
+              <RefreshCw className="ml-2 size-4 animate-spin" />
+            ) : (
+              <Camera className="ml-2 size-4" />
+            )}
             شروع اسکن بارکد / QR
           </Button>
         ) : (
           <>
+            {isStarting && <Skeleton className="h-52 w-full" />}
             <div id="qr-reader" className="w-full rounded-lg overflow-hidden ring-2 ring-primary/40" />
             <p className="text-xs text-primary text-center" role="status" aria-live="polite">
               دوربین فعال است؛ بارکد را مقابل دوربین نگه دارید.
@@ -110,7 +123,21 @@ export function BarcodeScanner({ onScan, onStatusChange }: BarcodeScannerProps) 
         )}
 
         {error && (
-          <p className="text-sm text-destructive text-center" role="alert">{error}</p>
+          <Empty className="gap-3 border border-destructive/40 bg-destructive/5 p-4">
+            <EmptyHeader className="max-w-full">
+              <EmptyMedia variant="icon" className="bg-destructive/10 text-destructive">
+                <TriangleAlert className="size-5" />
+              </EmptyMedia>
+              <EmptyTitle className="text-base">اسکنر در دسترس نیست</EmptyTitle>
+              <EmptyDescription>{error}</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button type="button" variant="outline" onClick={startScanning}>
+                <RefreshCw className="ml-2 size-4" />
+                تلاش مجدد
+              </Button>
+            </EmptyContent>
+          </Empty>
         )}
       </div>
     </Card>
