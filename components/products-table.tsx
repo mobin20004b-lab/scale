@@ -80,7 +80,7 @@ export function ProductsTable({
   const [pageSize, setPageSize] = useState(20);
   const [localProducts, setLocalProducts] = useState(products);
   const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
-    {},
+    {}
   );
 
   useEffect(() => {
@@ -125,7 +125,20 @@ export function ProductsTable({
     localProducts.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const rangeEnd = Math.min(currentPage * pageSize, localProducts.length);
 
-  const executeDelete = async (product: Product) => {
+  const executeDelete = async (product: Product, rollbackIndex: number) => {
+    const rollback = (reason: string) => {
+      setLocalProducts((previous) => {
+        if (previous.some((item) => item.id === product.id)) {
+          return previous;
+        }
+
+        const next = [...previous];
+        next.splice(Math.min(rollbackIndex, next.length), 0, product);
+        return next;
+      });
+      toast.error(`حذف محصول بازگردانی شد: ${reason}`);
+    };
+
     try {
       const response = await fetch(`/api/products/${product.id}`, {
         method: "DELETE",
@@ -134,24 +147,28 @@ export function ProductsTable({
       if (response.ok) {
         toast.success("محصول با موفقیت حذف شد");
         router.refresh();
-      } else {
-        setLocalProducts((previous) => [product, ...previous]);
-        toast.error("خطا در حذف محصول");
+        return;
       }
+
+      const payload = await response.json().catch(() => null);
+      rollback(payload?.error ?? "پاسخ سرویس نامعتبر بود.");
     } catch {
-      setLocalProducts((previous) => [product, ...previous]);
-      toast.error("خطا در حذف محصول");
+      rollback("ارتباط با سرور برقرار نشد.");
     }
   };
 
   const handleDelete = (product: Product) => {
+    const rollbackIndex = localProducts.findIndex(
+      (item) => item.id === product.id
+    );
+
     setLocalProducts((previous) =>
-      previous.filter((item) => item.id !== product.id),
+      previous.filter((item) => item.id !== product.id)
     );
 
     pendingDeletes.current[product.id] = setTimeout(() => {
       delete pendingDeletes.current[product.id];
-      executeDelete(product);
+      executeDelete(product, rollbackIndex);
     }, 5000);
 
     toast("محصول برای حذف علامت‌گذاری شد", {
@@ -163,7 +180,15 @@ export function ProductsTable({
           if (timer) {
             clearTimeout(timer);
             delete pendingDeletes.current[product.id];
-            setLocalProducts((previous) => [product, ...previous]);
+            setLocalProducts((previous) => {
+              if (previous.some((item) => item.id === product.id)) {
+                return previous;
+              }
+
+              const next = [...previous];
+              next.splice(Math.min(rollbackIndex, next.length), 0, product);
+              return next;
+            });
             toast.success("حذف محصول لغو شد");
           }
         },

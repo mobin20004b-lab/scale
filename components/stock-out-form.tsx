@@ -21,6 +21,7 @@ import { BarcodeScanner } from "./barcode-scanner";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
 import { stockOutFormSchema } from "@/lib/schemas/inventory";
+import { EmptyStatePanel } from "@/components/ui/async-state";
 
 type StockOutFormData = import("zod").infer<typeof stockOutFormSchema>;
 
@@ -53,6 +54,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
     setValue,
     reset,
     watch,
+    setFocus,
   } = useForm<StockOutFormData>({
     resolver: zodResolver(stockOutFormSchema),
     mode: "onChange",
@@ -103,6 +105,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
       setSelectedProduct(product);
       setShowScanner(false);
       toast.success(`محصول پیدا شد: ${product.name}`);
+      setFocus("quantity");
     } else {
       toast.error("محصولی با این بارکد یافت نشد");
     }
@@ -146,6 +149,26 @@ export function StockOutForm({ products }: StockOutFormProps) {
     }
   };
 
+  if (products.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Minus className="size-5" />
+            ثبت خروج کالا
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EmptyStatePanel
+            title="محصولی برای عملیات وجود ندارد"
+            description="ابتدا یک محصول ایجاد کنید تا فرم خروج فعال شود."
+            className="p-6"
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -157,7 +180,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
       <CardContent>
         <form
           onSubmit={handleSubmit(onSubmit)}
-          className="space-y-4 pb-24 md:pb-0"
+          className="space-y-4 pb-28 md:pb-0"
         >
           <div className="space-y-2">
             <Label>محصول *</Label>
@@ -170,7 +193,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
                     shouldValidate: true,
                   });
                   const product = products.find(
-                    (p) => p.id.toString() === value,
+                    (p) => p.id.toString() === value
                   );
                   setSelectedProduct(product || null);
                 }}
@@ -180,7 +203,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
                   aria-label="انتخاب محصول"
                   className={cn(
                     errors.productId &&
-                      "border-destructive focus-visible:ring-destructive",
+                      "border-destructive focus-visible:ring-destructive"
                   )}
                 >
                   <SelectValue placeholder="محصول را انتخاب کنید" />
@@ -223,7 +246,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
 
           {showScanner && (
             <p
-              className="text-xs text-center text-muted-foreground"
+              className="text-xs text-center text-muted-foreground mb-2"
               role="status"
               aria-live="polite"
             >
@@ -271,7 +294,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
               aria-invalid={!!errors.quantity || isOverWithdrawal}
               className={cn(
                 (errors.quantity || isOverWithdrawal) &&
-                  "border-destructive focus-visible:ring-destructive",
+                  "border-destructive focus-visible:ring-destructive"
               )}
             />
             {errors.quantity && (
@@ -291,6 +314,11 @@ export function StockOutForm({ products }: StockOutFormProps) {
                 هشدار: پس از ثبت خروج، موجودی به آستانه هشدار می‌رسد.
               </p>
             )}
+            <p className="text-xs text-muted-foreground">
+              {selectedProduct
+                ? `واحد انتخابی: ${selectedProduct.unit}. مثال: 1 ${selectedProduct.unit}`
+                : "برای جلوگیری از خطای واحد، ابتدا محصول را انتخاب کنید."}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -339,7 +367,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
             </Button>
           </div>
 
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 backdrop-blur md:hidden">
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden">
             <Button
               type="submit"
               disabled={isSubmitDisabled}

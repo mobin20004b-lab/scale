@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { DateTimeText } from "@/components/date-time-text";
-import { FileText, FilterX } from "lucide-react";
+import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyStatePanel } from "@/components/ui/async-state";
 import {
   Select,
   SelectContent,
@@ -91,7 +92,7 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
           date: new Date(item.createdAt),
         })),
       ].sort((a, b) => b.date.getTime() - a.date.getTime()),
-    [stockIns, stockOuts],
+    [stockIns, stockOuts]
   );
 
   const paginatedTransactions = useMemo(() => {
@@ -172,22 +173,16 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
               {transactions.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-12">
-                    <div className="flex flex-col items-center justify-center gap-3 text-center">
-                      <FileText className="size-10 text-muted-foreground" />
-                      <p className="font-medium">
-                        تراکنشی با فیلترهای فعلی یافت نشد
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        برای مشاهده داده‌ها، فیلترها را پاک کنید.
-                      </p>
-                      <Button
-                        variant="outline"
-                        onClick={() => router.push("/dashboard/reports")}
-                      >
-                        <FilterX className="size-4 ml-2" />
-                        پاک کردن فیلترها
-                      </Button>
-                    </div>
+                    <EmptyStatePanel
+                      title="تراکنشی با فیلترهای فعلی یافت نشد"
+                      description="برای مشاهده داده‌ها، فیلترها را پاک کنید."
+                      icon={<FileText className="size-5" />}
+                      action={{
+                        label: "پاک کردن فیلترها",
+                        onClick: () => router.push("/dashboard/reports"),
+                      }}
+                      className="p-4"
+                    />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -227,24 +222,16 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
 
           <div className="space-y-3 p-3 md:hidden">
             {transactions.length === 0 ? (
-              <div className="rounded-lg border p-6">
-                <div className="flex flex-col items-center justify-center gap-3 text-center">
-                  <FileText className="size-10 text-muted-foreground" />
-                  <p className="font-medium">
-                    تراکنشی با فیلترهای فعلی یافت نشد
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    برای مشاهده داده‌ها، فیلترها را پاک کنید.
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push("/dashboard/reports")}
-                  >
-                    <FilterX className="size-4 ml-2" />
-                    پاک کردن فیلترها
-                  </Button>
-                </div>
-              </div>
+              <EmptyStatePanel
+                title="تراکنشی با فیلترهای فعلی یافت نشد"
+                description="برای مشاهده داده‌ها، فیلترها را پاک کنید."
+                icon={<FileText className="size-5" />}
+                action={{
+                  label: "پاک کردن فیلترها",
+                  onClick: () => router.push("/dashboard/reports"),
+                }}
+                className="p-4"
+              />
             ) : (
               paginatedTransactions.map((transaction) => (
                 <div
