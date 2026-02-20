@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,11 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Filter, Download } from "lucide-react"
+import { Download } from "lucide-react"
 import { toast } from "sonner"
 
 interface Product {
-  id: number
+  id: string
   name: string
 }
 
@@ -34,7 +34,7 @@ export function ReportsFilters({
   initialStartDate,
   initialEndDate,
   initialProductId,
-  initialType
+  initialType,
 }: ReportsFiltersProps) {
   const router = useRouter()
   const [startDate, setStartDate] = useState(initialStartDate)
@@ -42,32 +42,41 @@ export function ReportsFilters({
   const [productId, setProductId] = useState(initialProductId || "all")
   const [type, setType] = useState(initialType)
 
-  const handleFilter = () => {
+  const applyFilters = () => {
     const params = new URLSearchParams()
-    if (startDate) params.set('startDate', startDate)
-    if (endDate) params.set('endDate', endDate)
-    if (productId && productId !== "all") params.set('productId', productId)
-    if (type) params.set('type', type)
-    
+    if (startDate) params.set("startDate", startDate)
+    if (endDate) params.set("endDate", endDate)
+    if (productId && productId !== "all") params.set("productId", productId)
+    if (type) params.set("type", type)
+
     router.push(`/dashboard/reports?${params.toString()}`)
   }
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      applyFilters()
+    }, 400)
+
+    return () => clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate, productId, type])
 
   const handleExport = async () => {
     try {
       const params = new URLSearchParams()
-      if (startDate) params.set('startDate', startDate)
-      if (endDate) params.set('endDate', endDate)
-      if (productId && productId !== "all") params.set('productId', productId)
-      if (type) params.set('type', type)
-      
+      if (startDate) params.set("startDate", startDate)
+      if (endDate) params.set("endDate", endDate)
+      if (productId && productId !== "all") params.set("productId", productId)
+      if (type) params.set("type", type)
+
       const response = await fetch(`/api/reports/export?${params.toString()}`)
-      
+
       if (response.ok) {
         const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
+        const a = document.createElement("a")
         a.href = url
-        a.download = `warehouse-report-${new Date().toISOString().split('T')[0]}.csv`
+        a.download = `warehouse-report-${new Date().toISOString().split("T")[0]}.csv`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
@@ -76,7 +85,7 @@ export function ReportsFilters({
       } else {
         toast.error("خطا در دانلود گزارش")
       }
-    } catch (error) {
+    } catch {
       toast.error("خطا در دانلود گزارش")
     }
   }
@@ -92,6 +101,7 @@ export function ReportsFilters({
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyFilters()}
             />
           </div>
 
@@ -102,6 +112,7 @@ export function ReportsFilters({
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyFilters()}
             />
           </div>
 
@@ -114,7 +125,7 @@ export function ReportsFilters({
               <SelectContent>
                 <SelectItem value="all">همه محصولات</SelectItem>
                 {products.map((product) => (
-                  <SelectItem key={product.id} value={product.id.toString()}>
+                  <SelectItem key={product.id} value={product.id}>
                     {product.name}
                   </SelectItem>
                 ))}
@@ -137,12 +148,9 @@ export function ReportsFilters({
           </div>
 
           <div className="flex items-end gap-2">
-            <Button onClick={handleFilter} className="flex-1">
-              <Filter className="ml-2 size-4" />
-              فیلتر
-            </Button>
-            <Button onClick={handleExport} variant="outline">
-              <Download className="size-4" />
+            <Button onClick={handleExport} variant="outline" className="w-full">
+              <Download className="size-4 ml-2" />
+              دانلود
             </Button>
           </div>
         </div>

@@ -113,7 +113,6 @@ export default async function ReportsPage({
       <ReportsTable
         stockIns={stockIns}
         stockOuts={stockOuts}
-        type={type}
       />
     </div>
   )
