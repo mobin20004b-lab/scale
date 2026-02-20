@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { format } from "date-fns"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -13,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Download } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { CalendarIcon, Download } from "lucide-react"
 import { toast } from "sonner"
 
 interface Product {
@@ -27,6 +30,65 @@ interface ReportsFiltersProps {
   initialEndDate: string
   initialProductId?: string
   initialType: string
+}
+
+const persianDateFormatter = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
+function toDate(value: string) {
+  if (!value) return undefined
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return undefined
+  return date
+}
+
+function DatePickerField({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  const selectedDate = toDate(value)
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            id={id}
+            variant="outline"
+            className={cn(
+              "w-full justify-between text-right font-normal",
+              !selectedDate && "text-muted-foreground",
+            )}
+          >
+            {selectedDate
+              ? persianDateFormatter.format(selectedDate)
+              : "انتخاب تاریخ"}
+            <CalendarIcon className="size-4" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={selectedDate}
+            onSelect={(date) => onChange(date ? format(date, "yyyy-MM-dd") : "")}
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
 }
 
 export function ReportsFilters({
@@ -94,27 +156,9 @@ export function ReportsFilters({
     <Card>
       <CardContent className="pt-6">
         <div className="grid gap-4 md:grid-cols-5">
-          <div className="space-y-2">
-            <Label htmlFor="startDate">از تاریخ</Label>
-            <Input
-              id="startDate"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && applyFilters()}
-            />
-          </div>
+          <DatePickerField id="startDate" label="از تاریخ" value={startDate} onChange={setStartDate} />
 
-          <div className="space-y-2">
-            <Label htmlFor="endDate">تا تاریخ</Label>
-            <Input
-              id="endDate"
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && applyFilters()}
-            />
-          </div>
+          <DatePickerField id="endDate" label="تا تاریخ" value={endDate} onChange={setEndDate} />
 
           <div className="space-y-2">
             <Label>محصول</Label>
