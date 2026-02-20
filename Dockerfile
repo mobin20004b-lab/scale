@@ -5,10 +5,10 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json* pnpm-lock.yaml* bun.lock* ./
 RUN \
-  if [ -f package-lock.json ]; then npm ci; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; \
-  elif [ -f bun.lock ]; then npm install -g bun && bun install --frozen-lockfile; \
-  else npm install; \
+  if [ -f package-lock.json ]; then npm ci --ignore-scripts; \
+  elif [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile --ignore-scripts; \
+  elif [ -f bun.lock ]; then npm install -g bun && bun install --frozen-lockfile --ignore-scripts; \
+  else npm install --ignore-scripts; \
   fi
 
 FROM node:20-alpine AS builder
