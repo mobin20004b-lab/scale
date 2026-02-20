@@ -2,6 +2,7 @@ import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
+import { isUserActive } from "@/lib/system-settings"
 
 const prisma = new PrismaClient()
 
@@ -31,6 +32,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         )
 
         if (!isValidPassword) {
+          return null
+        }
+
+        const active = await isUserActive(user.id)
+        if (!active) {
           return null
         }
 
