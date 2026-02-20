@@ -4,7 +4,12 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json* pnpm-lock.yaml* bun.lock* ./
-RUN npm ci
+RUN \
+  if [ -f package-lock.json ]; then npm ci; \
+  elif [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; \
+  elif [ -f bun.lock ]; then npm install -g bun && bun install --frozen-lockfile; \
+  else npm install; \
+  fi
 
 FROM node:20-alpine AS builder
 WORKDIR /app
