@@ -29,44 +29,48 @@ export async function POST(request: Request) {
     }
 
     // Check if enough quantity available
-    if (Number(product.currentStock) < parseFloat(quantity)) {
+    if (Number(product.currentStock) < parseFloat(String(quantity))) {
       return NextResponse.json(
         { error: "Insufficient quantity available" },
         { status: 400 }
       )
     }
 
-    // Create stock out record
-    const stockOut = await prisma.stockOut.create({
-      data: {
-        productId,
-        userId: (session.user as any).id,
-        quantity: parseFloat(quantity),
-        customer: customer || null,
-        invoiceNumber: invoiceNumber || null,
-        notes: notes || null
-      }
-    })
+    const parsedQuantity = parseFloat(String(quantity))
 
-    // Update product quantity
-    await prisma.product.update({
-      where: { id: productId },
-      data: {
-        currentStock: {
-          decrement: parseFloat(quantity)
+    // Create stock out record + update product quantity + activity log atomically
+    const stockOut = await prisma.$transaction(async (tx) => {
+      const createdStockOut = await tx.stockOut.create({
+        data: {
+          productId,
+          userId: (session.user as any).id,
+          quantity: parsedQuantity,
+          customer: customer || null,
+          invoiceNumber: invoiceNumber || null,
+          notes: notes || null
         }
-      }
-    })
+      })
 
-    // Log activity
-    await prisma.activity.create({
-      data: {
-        userId: (session.user as any).id,
-        action: "خروج کالا",
-        entity: "StockOut",
-        entityId: stockOut.id,
-        details: `${parseFloat(quantity)} ${product.unit} از "${product.name}" از انبار خارج شد`
-      }
+      await tx.product.update({
+        where: { id: productId },
+        data: {
+          currentStock: {
+            decrement: parsedQuantity
+          }
+        }
+      })
+
+      await tx.activity.create({
+        data: {
+          userId: (session.user as any).id,
+          action: "خروج کالا",
+          entity: "StockOut",
+          entityId: createdStockOut.id,
+          details: `${parsedQuantity} ${product.unit} از "${product.name}" از انبار خارج شد`
+        }
+      })
+
+      return createdStockOut
     })
 
     return NextResponse.json(stockOut, { status: 201 })
