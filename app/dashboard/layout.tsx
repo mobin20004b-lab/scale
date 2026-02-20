@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { DashboardSidebar } from "@/components/dashboard-sidebar"
-import { DashboardHeader } from "@/components/dashboard-header"
+import { DashboardShell } from "@/components/dashboard-shell"
 
 export default async function DashboardLayout({
   children,
@@ -15,14 +14,8 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" dir="rtl">
-      <DashboardSidebar user={session.user} />
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <DashboardHeader user={session.user} />
-        <main className="flex-1 overflow-y-auto bg-muted/30 p-6">
-          {children}
-        </main>
-      </div>
-    </div>
+    <DashboardShell user={session.user}>
+      {children}
+    </DashboardShell>
   )
 }
