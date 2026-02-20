@@ -3,8 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { History, Plus } from "lucide-react";
 import { DateTimeText } from "@/components/date-time-text";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import Link from "next/link";
+import { EmptyStatePanel } from "@/components/ui/async-state";
 
 interface StockOut {
   id: string;
@@ -23,9 +22,10 @@ interface StockOut {
 
 interface StockOutListProps {
   stockOuts: StockOut[];
+  highlightId?: string;
 }
 
-export function StockOutList({ stockOuts }: StockOutListProps) {
+export function StockOutList({ stockOuts, highlightId }: StockOutListProps) {
   return (
     <Card>
       <CardHeader>
@@ -38,27 +38,21 @@ export function StockOutList({ stockOuts }: StockOutListProps) {
         <ScrollArea className="h-[600px] pr-4">
           <div className="space-y-3">
             {stockOuts.length === 0 ? (
-              <Empty className="p-4">
-                <EmptyHeader>
-                  <EmptyTitle className="text-base">هنوز خروجی ثبت نشده است</EmptyTitle>
-                  <EmptyDescription>
-                    پس از ثبت خروج کالا، گزارش این بخش نمایش داده می‌شود.
-                  </EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  <Link href="/dashboard/stock-out" className="inline-flex">
-                    <span className="inline-flex items-center rounded-md border px-3 py-1.5 text-sm">
-                      <Plus className="ml-2 size-4" />
-                      ثبت خروج جدید
-                    </span>
-                  </Link>
-                </EmptyContent>
-              </Empty>
+              <EmptyStatePanel
+                title="هنوز خروجی ثبت نشده است"
+                description="پس از ثبت خروج کالا، گزارش این بخش نمایش داده می‌شود."
+                icon={<Plus className="size-5" />}
+                action={{
+                  label: "ثبت خروج جدید",
+                  href: "/dashboard/stock-out",
+                }}
+                className="p-4"
+              />
             ) : (
               stockOuts.map((stockOut) => (
                 <div
                   key={stockOut.id}
-                  className="p-4 rounded-lg border bg-card space-y-3"
+                  className={`p-4 rounded-lg border bg-card space-y-3 ${highlightId === stockOut.id ? "ring-2 ring-primary/50" : ""}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">

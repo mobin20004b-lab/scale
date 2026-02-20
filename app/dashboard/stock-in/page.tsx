@@ -2,7 +2,13 @@ import { StockInForm } from "@/components/stock-in-form";
 import { StockInList } from "@/components/stock-in-list";
 import { prisma } from "@/lib/prisma";
 
-export default async function StockInPage() {
+export default async function StockInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ highlight?: string }>;
+}) {
+  const params = await searchParams;
+
   const [products, recentStockIns, warehouses, scales] = await Promise.all([
     prisma.product.findMany({
       orderBy: { name: "asc" },
@@ -55,7 +61,7 @@ export default async function StockInPage() {
           warehouses={warehouses}
           scales={scales}
         />
-        <StockInList stockIns={recentStockIns} />
+        <StockInList stockIns={recentStockIns} highlightId={params.highlight} />
       </div>
     </div>
   );

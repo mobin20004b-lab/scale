@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { stockInFormSchema } from "@/lib/schemas/inventory";
 import { formatScaleWeight } from "@/lib/scale-reading";
+import { EmptyStatePanel } from "@/components/ui/async-state";
 import {
   Empty,
   EmptyContent,
@@ -87,6 +88,7 @@ export function StockInForm({
     setValue,
     reset,
     watch,
+    setFocus,
   } = useForm<StockInFormData>({
     resolver: zodResolver(stockInFormSchema),
     mode: "onChange",
@@ -184,6 +186,7 @@ export function StockInForm({
       setSelectedProduct(product);
       setShowScanner(false);
       toast.success(`محصول پیدا شد: ${product.name}`);
+      setFocus("quantity");
     } else {
       toast.error("محصولی با این بارکد یافت نشد");
     }
@@ -225,6 +228,26 @@ export function StockInForm({
     }
   };
 
+  if (products.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plus className="size-5" />
+            ثبت ورود کالا
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EmptyStatePanel
+            title="محصولی برای ثبت ورود وجود ندارد"
+            description="ابتدا محصول جدید ثبت کنید تا فرم ورود فعال شود."
+            className="p-6"
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -236,7 +259,7 @@ export function StockInForm({
       <CardContent>
         <form
           onSubmit={handleSubmit(onSubmit)}
-          className="space-y-4 pb-24 md:pb-0"
+          className="space-y-4 pb-28 md:pb-0"
         >
           <div className="space-y-2">
             <Label>انبار</Label>
@@ -422,7 +445,7 @@ export function StockInForm({
 
           {showScanner && (
             <p
-              className="text-xs text-center text-muted-foreground"
+              className="text-xs text-center text-muted-foreground mb-2"
               role="status"
               aria-live="polite"
             >
@@ -467,6 +490,11 @@ export function StockInForm({
                 {errors.quantity.message}
               </p>
             )}
+            <p className="text-xs text-muted-foreground">
+              {selectedProduct
+                ? `واحد انتخابی: ${selectedProduct.unit}. مثال: 2.5 ${selectedProduct.unit}`
+                : "پس از انتخاب محصول، واحد و مثال ورود مقدار نمایش داده می‌شود."}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -515,7 +543,7 @@ export function StockInForm({
             </Button>
           </div>
 
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 backdrop-blur md:hidden">
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden">
             <Button
               type="submit"
               disabled={isLoading || !isValid || !productId}
