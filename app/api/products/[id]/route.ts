@@ -20,9 +20,9 @@ export async function PUT(
       where: { id },
       data: {
         name,
-        sku: sku || null,
+        sku: sku || undefined,
         barcode: barcode || null,
-        category: category || null,
+        category: category || undefined,
         unit,
         minStock: parseFloat(minStock),
         weightPerUnit: weightPerUnit !== undefined ? parseFloat(weightPerUnit) : undefined,

@@ -42,9 +42,9 @@ export async function POST(request: Request) {
     const product = await prisma.product.create({
       data: {
         name,
-        sku: sku || null,
+        sku: sku || `PRD-${Date.now().toString(36).toUpperCase()}`,
         barcode: barcode || null,
-        category: category || null,
+        category: category || "بدون دسته‌بندی",
         unit,
         minStock: parseFloat(minStock),
         weightPerUnit: parseFloat(weightPerUnit),
@@ -52,6 +52,8 @@ export async function POST(request: Request) {
         currentStock: 0
       }
     })
+
+    console.error('[v0] Debug session.user:', session.user);
 
     // Log activity
     await prisma.activity.create({
