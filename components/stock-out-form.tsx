@@ -49,6 +49,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [scannerStatus, setScannerStatus] = useState<"idle" | "scanning" | "success" | "error">("idle")
 
   const {
     register,
@@ -141,7 +142,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
                 }}
                 value={selectedProduct?.id.toString()}
               >
-                <SelectTrigger>
+                <SelectTrigger aria-label="انتخاب محصول">
                   <SelectValue placeholder="محصول را انتخاب کنید" />
                 </SelectTrigger>
                 <SelectContent>
@@ -157,6 +158,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
                 variant="outline"
                 size="icon"
                 onClick={() => setShowScanner(!showScanner)}
+                aria-label={showScanner ? "بستن اسکنر بارکد" : "باز کردن اسکنر بارکد"}
               >
                 <Scan className="size-4" />
               </Button>
@@ -167,7 +169,16 @@ export function StockOutForm({ products }: StockOutFormProps) {
           </div>
 
           {showScanner && (
-            <BarcodeScanner onScan={handleBarcodeScanned} />
+            <BarcodeScanner onScan={handleBarcodeScanned} onStatusChange={setScannerStatus} />
+          )}
+
+          {showScanner && (
+            <p className="text-xs text-center text-muted-foreground" role="status" aria-live="polite">
+              {scannerStatus === "scanning" && "در حال اسکن..."}
+              {scannerStatus === "success" && "بارکد با موفقیت خوانده شد."}
+              {scannerStatus === "error" && "اسکنر در دسترس نیست؛ دسترسی دوربین را بررسی کنید."}
+              {scannerStatus === "idle" && "برای اسکن بارکد، دوربین را فعال کنید."}
+            </p>
           )}
 
           {selectedProduct && (
@@ -179,7 +190,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
                 </Badge>
               </div>
               {willBeLowStock && (
-                <div className="flex items-center gap-2 text-orange-600">
+                <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
                   <AlertTriangle className="size-4" />
                   <span className="text-xs">هشدار: موجودی به سطح بحرانی می‌رسد</span>
                 </div>
@@ -237,7 +248,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
             />
           </div>
 
-          <Button type="submit" disabled={isLoading || !selectedProduct} className="w-full">
+          <Button type="submit" disabled={isLoading || !selectedProduct} className="w-full" aria-busy={isLoading}>
             {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
             ثبت خروج کالا
           </Button>

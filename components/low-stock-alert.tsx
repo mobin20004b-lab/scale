@@ -22,7 +22,7 @@ export function LowStockAlert({ products }: LowStockAlertProps) {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <AlertTriangle className="size-5 text-orange-600" />
+          <AlertTriangle className="size-5 text-orange-700 dark:text-orange-300" />
           هشدار موجودی کم
         </CardTitle>
       </CardHeader>

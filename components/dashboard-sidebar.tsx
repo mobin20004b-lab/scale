@@ -1,5 +1,6 @@
 "use client"
 
+import type { KeyboardEvent } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -72,6 +73,37 @@ interface DashboardSidebarProps {
 export function DashboardSidebar({ user, className, onNavigate }: DashboardSidebarProps) {
   const pathname = usePathname()
 
+  const handleNavKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
+    const links = Array.from(
+      document.querySelectorAll<HTMLAnchorElement>('a[data-sidebar-link="true"]')
+    )
+    const currentIndex = links.indexOf(event.currentTarget)
+
+    if (currentIndex === -1) return
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault()
+      const nextIndex = (currentIndex + 1) % links.length
+      links[nextIndex]?.focus()
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault()
+      const prevIndex = (currentIndex - 1 + links.length) % links.length
+      links[prevIndex]?.focus()
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault()
+      links[0]?.focus()
+    }
+
+    if (event.key === "End") {
+      event.preventDefault()
+      links[links.length - 1]?.focus()
+    }
+  }
+
   return (
     <aside className={cn("flex flex-col w-64 border-l bg-card", className)}>
       <div className="flex items-center gap-3 p-6 border-b">
@@ -84,10 +116,10 @@ export function DashboardSidebar({ user, className, onNavigate }: DashboardSideb
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1" aria-label="ناوبری داشبورد">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href || 
+          const isActive = pathname === item.href ||
             (item.href !== "/dashboard" && pathname.startsWith(item.href))
 
           return (
@@ -95,6 +127,8 @@ export function DashboardSidebar({ user, className, onNavigate }: DashboardSideb
               key={item.href}
               href={item.href}
               onClick={onNavigate}
+              onKeyDown={handleNavKeyDown}
+              data-sidebar-link="true"
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 isActive
@@ -102,6 +136,7 @@ export function DashboardSidebar({ user, className, onNavigate }: DashboardSideb
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
               aria-current={isActive ? "page" : undefined}
+              aria-label={`رفتن به ${item.title}`}
             >
               <Icon className="size-5 shrink-0" />
               <span>{item.title}</span>
