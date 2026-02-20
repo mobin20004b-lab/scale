@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Edit, Plus, Trash2 } from "lucide-react"
+import { Edit, Plus, Search, Trash2, WarehouseIcon } from "lucide-react"
 
 interface Warehouse {
   id: string
@@ -47,6 +47,19 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
   const [name, setName] = useState("")
   const [location, setLocation] = useState("")
   const [description, setDescription] = useState("")
+  const [search, setSearch] = useState("")
+
+  const filteredWarehouses = warehouses.filter((warehouse) => {
+    const keyword = search.trim().toLowerCase()
+    if (!keyword) return true
+    return (
+      warehouse.name.toLowerCase().includes(keyword) ||
+      warehouse.location?.toLowerCase().includes(keyword) ||
+      warehouse.description?.toLowerCase().includes(keyword)
+    )
+  })
+
+  const totalScales = warehouses.reduce((sum, warehouse) => sum + (warehouse._count?.scales ?? 0), 0)
 
   const resetForm = () => {
     setName("")
@@ -136,14 +149,47 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
         </Dialog>
       </CardHeader>
       <CardContent className="space-y-3">
-        {warehouses.map((warehouse) => (
+        <div className="grid gap-2 md:grid-cols-3">
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="text-xs text-muted-foreground">تعداد کل انبارها</div>
+            <div className="text-lg font-semibold">{warehouses.length}</div>
+          </div>
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="text-xs text-muted-foreground">ترازوهای متصل</div>
+            <div className="text-lg font-semibold">{totalScales}</div>
+          </div>
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="text-xs text-muted-foreground">انبارهای بدون ترازو</div>
+            <div className="text-lg font-semibold">{warehouses.filter((item) => (item._count?.scales ?? 0) === 0).length}</div>
+          </div>
+        </div>
+
+        <div className="relative">
+          <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pr-10"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="جستجو در نام، موقعیت یا توضیحات انبار"
+          />
+        </div>
+
+        {filteredWarehouses.map((warehouse) => (
           <div key={warehouse.id} className="rounded-lg border p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
-                <div className="font-medium">{warehouse.name}</div>
+                <div className="font-medium flex items-center gap-2">
+                  <WarehouseIcon className="size-4 text-muted-foreground" />
+                  {warehouse.name}
+                </div>
                 {warehouse.location && <div className="text-sm text-muted-foreground">{warehouse.location}</div>}
                 {warehouse.description && <div className="text-sm text-muted-foreground">{warehouse.description}</div>}
-                <Badge variant="secondary">{warehouse._count?.scales ?? 0} ترازو</Badge>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Badge variant="secondary">{warehouse._count?.scales ?? 0} ترازو</Badge>
+                  <Badge variant={(warehouse._count?.scales ?? 0) > 0 ? "default" : "outline"}>
+                    {(warehouse._count?.scales ?? 0) > 0 ? "آماده اتصال" : "بدون ترازو"}
+                  </Badge>
+                </div>
               </div>
               <div className="flex items-center gap-1">
                 <Button
@@ -182,6 +228,12 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
             </div>
           </div>
         ))}
+
+        {filteredWarehouses.length === 0 && (
+          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            هیچ انباری با جستجوی فعلی پیدا نشد.
+          </div>
+        )}
       </CardContent>
     </Card>
   )
