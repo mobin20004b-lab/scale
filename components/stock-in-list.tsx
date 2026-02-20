@@ -18,6 +18,9 @@ interface StockIn {
   user: {
     full_name: string
   }
+  warehouse?: {
+    name: string
+  } | null
 }
 
 interface StockInListProps {
@@ -53,22 +56,25 @@ export function StockInList({ stockIns }: StockInListProps) {
                         <Badge variant="default">
                           +{Number(stockIn.quantity).toFixed(2)} {stockIn.product.unit}
                         </Badge>
+                        {stockIn.warehouse?.name && (
+                          <Badge variant="secondary">{stockIn.warehouse.name}</Badge>
+                        )}
                       </div>
                     </div>
                   </div>
-                  
+
                   {stockIn.supplier && (
                     <p className="text-sm text-muted-foreground">
                       <span className="font-medium">تامین‌کننده:</span> {stockIn.supplier}
                     </p>
                   )}
-                  
+
                   {stockIn.invoiceNumber && (
                     <p className="text-sm text-muted-foreground">
                       <span className="font-medium">شماره فاکتور:</span> {stockIn.invoiceNumber}
                     </p>
                   )}
-                  
+
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
                     <span>{stockIn.user.full_name}</span>
                     <span>

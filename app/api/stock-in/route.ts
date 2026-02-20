@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { productId, quantity, supplier, invoiceNumber, notes } = body
+    const { productId, quantity, supplier, invoiceNumber, notes, warehouseId, scaleId, scaleWeight } = body
 
     if (!productId || !quantity || quantity <= 0) {
       return NextResponse.json(
@@ -19,7 +19,8 @@ export async function POST(request: Request) {
       )
     }
 
-    // Get product
+    const parsedQuantity = parseFloat(String(quantity))
+
     const product = await prisma.product.findUnique({
       where: { id: productId }
     })
@@ -28,36 +29,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
     }
 
-    // Create stock in record
     const stockIn = await prisma.stockIn.create({
       data: {
         productId,
         userId: (session.user as any).id,
-        quantity: parseFloat(quantity),
+        quantity: parsedQuantity,
+        weight: parsedQuantity,
         supplier: supplier || null,
         invoiceNumber: invoiceNumber || null,
-        notes: notes || null
+        notes: notes || null,
+        warehouseId: warehouseId || null,
+        scaleId: scaleId || null,
+        scaleWeight: scaleWeight !== undefined && scaleWeight !== null ? Number(scaleWeight) : null,
       }
     })
 
-    // Update product quantity
     await prisma.product.update({
       where: { id: productId },
       data: {
         currentStock: {
-          increment: parseFloat(quantity)
+          increment: parsedQuantity
         }
       }
     })
 
-    // Log activity
     await prisma.activity.create({
       data: {
         userId: (session.user as any).id,
         action: "ورود کالا",
         entity: "StockIn",
         entityId: stockIn.id,
-        details: `${parseFloat(quantity)} ${product.unit} از "${product.name}" به انبار اضافه شد`
+        details: `${parsedQuantity} ${product.unit} از "${product.name}" به انبار اضافه شد`
       }
     })
 

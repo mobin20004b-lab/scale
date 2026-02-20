@@ -66,8 +66,11 @@ model StockIn {
   id            String    @id @default(cuid())
   productId     String
   userId        String
+  warehouseId   String?
+  scaleId       String?
   quantity      Float     // Number of units
   weight        Float     // Total weight in grams
+  scaleWeight   Float?    // Weight recorded from scale at time of stock-in
   supplier      String?
   invoiceNumber String?
   notes         String?
@@ -77,11 +80,45 @@ model StockIn {
   // Relations
   product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   user          User      @relation(fields: [userId], references: [id])
+  warehouse     Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  scale         Scale?    @relation(fields: [scaleId], references: [id], onDelete: SetNull)
   
   @@map("stock_ins")
   @@index([productId])
   @@index([userId])
+  @@index([warehouseId])
+  @@index([scaleId])
   @@index([date])
+}
+
+model Warehouse {
+  id          String    @id @default(cuid())
+  name        String
+  location    String?
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  scales      Scale[]
+  stockIns    StockIn[]
+
+  @@map("warehouses")
+}
+
+model Scale {
+  id           String     @id @default(cuid())
+  name         String
+  apiKey       String     @unique @default(cuid())
+  warehouseId  String
+  warehouse    Warehouse  @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  lastWeight   Float?
+  lastWeightAt DateTime?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  stockIns     StockIn[]
+
+  @@map("scales")
+  @@index([warehouseId])
 }
 
 // Stock Out model
