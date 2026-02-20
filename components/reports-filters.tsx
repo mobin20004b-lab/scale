@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { formatPersianDate } from "@/lib/date-time"
 import { CalendarIcon, Download } from "lucide-react"
 import { toast } from "sonner"
 
@@ -32,11 +33,6 @@ interface ReportsFiltersProps {
   initialType: string
 }
 
-const persianDateFormatter = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-})
 
 function toDate(value: string) {
   if (!value) return undefined
@@ -73,7 +69,7 @@ function DatePickerField({
             )}
           >
             {selectedDate
-              ? persianDateFormatter.format(selectedDate)
+              ? formatPersianDate(selectedDate)
               : "انتخاب تاریخ"}
             <CalendarIcon className="size-4" />
           </Button>

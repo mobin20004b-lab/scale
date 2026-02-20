@@ -23,6 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Check, Copy, Edit, Eye, EyeOff, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { DateTimeText } from "@/components/date-time-text"
 
 interface Warehouse {
   id: string
@@ -289,7 +290,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                 <Badge variant={scale.isActive ? "default" : "secondary"}>{scale.isActive ? "فعال" : "غیرفعال"}</Badge>
                 <Badge>{lastWeight !== null ? `${Number(lastWeight).toFixed(2)} گرم` : "بدون وزن"}</Badge>
                 <span className="text-muted-foreground">
-                  {lastWeightAt ? `آخرین دریافت: ${new Date(lastWeightAt).toLocaleTimeString("fa-IR")}` : "داده‌ای دریافت نشده"}
+                  {lastWeightAt ? <>آخرین دریافت: <DateTimeText value={lastWeightAt} showTimeZone /></> : "داده‌ای دریافت نشده"}
                 </span>
               </div>
               <div className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground font-mono">
