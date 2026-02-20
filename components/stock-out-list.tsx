@@ -6,11 +6,11 @@ import { format } from "date-fns"
 import { faIR } from "date-fns/locale"
 
 interface StockOut {
-  id: number
+  id: string
   quantity: number
-  recipient: string | null
-  reference_number: string | null
-  created_at: Date
+  customer: string | null
+  invoiceNumber: string | null
+  createdAt: Date
   product: {
     name: string
     unit: string
@@ -57,22 +57,22 @@ export function StockOutList({ stockOuts }: StockOutListProps) {
                     </div>
                   </div>
                   
-                  {stockOut.recipient && (
+                  {stockOut.customer && (
                     <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">گیرنده:</span> {stockOut.recipient}
+                      <span className="font-medium">مشتری:</span> {stockOut.customer}
                     </p>
                   )}
                   
-                  {stockOut.reference_number && (
+                  {stockOut.invoiceNumber && (
                     <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">شماره مرجع:</span> {stockOut.reference_number}
+                      <span className="font-medium">شماره فاکتور:</span> {stockOut.invoiceNumber}
                     </p>
                   )}
                   
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
                     <span>{stockOut.user.full_name}</span>
                     <span>
-                      {format(new Date(stockOut.created_at), 'yyyy/MM/dd HH:mm', { locale: faIR })}
+                      {format(new Date(stockOut.createdAt), 'yyyy/MM/dd HH:mm', { locale: faIR })}
                     </span>
                   </div>
                 </div>

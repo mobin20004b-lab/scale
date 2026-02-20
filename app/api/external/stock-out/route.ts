@@ -17,46 +17,55 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { product_id, quantity, recipient, reference_number, notes } = body
+    const { productId, quantity, customer, invoiceNumber, notes } = body
 
-    if (!product_id || !quantity || quantity <= 0) {
+    if (!productId || !quantity || quantity <= 0) {
       return NextResponse.json(
-        { error: "Missing or invalid required fields: product_id, quantity" },
+        { error: "Missing or invalid required fields: productId, quantity" },
         { status: 400 }
       )
     }
 
     const product = await prisma.product.findUnique({
-      where: { id: product_id }
+      where: { id: productId }
     })
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
     }
 
-    if (Number(product.current_quantity) < parseFloat(quantity)) {
+    if (Number(product.currentStock) < parseFloat(quantity)) {
       return NextResponse.json(
         { error: "Insufficient quantity available" },
         { status: 400 }
       )
     }
 
-    // Use system user (id: 1) for external API calls
+    // Get system admin user for external API calls
+    const systemUser = await prisma.user.findFirst({
+      where: { role: "ADMIN" }
+    })
+
+    if (!systemUser) {
+      return NextResponse.json({ error: "System user not found" }, { status: 500 })
+    }
+
+    // Create stock out record
     const stockOut = await prisma.stockOut.create({
       data: {
-        product_id,
-        user_id: 1,
+        productId,
+        userId: systemUser.id,
         quantity: parseFloat(quantity),
-        recipient: recipient || null,
-        reference_number: reference_number || null,
+        customer: customer || null,
+        invoiceNumber: invoiceNumber || null,
         notes: notes || null
       }
     })
 
     await prisma.product.update({
-      where: { id: product_id },
+      where: { id: productId },
       data: {
-        current_quantity: {
+        currentStock: {
           decrement: parseFloat(quantity)
         }
       }
@@ -64,8 +73,10 @@ export async function POST(request: Request) {
 
     await prisma.activity.create({
       data: {
-        user_id: 1,
+        userId: systemUser.id,
         action: "خروج کالا (API)",
+        entity: "StockOut",
+        entityId: stockOut.id,
         details: `${parseFloat(quantity)} ${product.unit} از "${product.name}" از طریق API خارج شد`
       }
     })
@@ -75,9 +86,9 @@ export async function POST(request: Request) {
       message: "Stock out recorded successfully",
       stock_out: {
         id: stockOut.id,
-        product_id: stockOut.product_id,
+        productId: stockOut.productId,
         quantity: Number(stockOut.quantity),
-        created_at: stockOut.created_at
+        createdAt: stockOut.createdAt
       }
     }, { status: 201 })
   } catch (error) {

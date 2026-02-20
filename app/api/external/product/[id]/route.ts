@@ -22,26 +22,26 @@ export async function GET(
     const { id } = await context.params
 
     const product = await prisma.product.findUnique({
-      where: { id: parseInt(id) },
+      where: { id },
       include: {
-        stock_ins: {
+        stockIns: {
           take: 10,
-          orderBy: { created_at: 'desc' },
+          orderBy: { createdAt: 'desc' },
           select: {
             id: true,
             quantity: true,
             supplier: true,
-            created_at: true
+            createdAt: true
           }
         },
-        stock_outs: {
+        stockOuts: {
           take: 10,
-          orderBy: { created_at: 'desc' },
+          orderBy: { createdAt: 'desc' },
           select: {
             id: true,
             quantity: true,
-            recipient: true,
-            created_at: true
+            customer: true,
+            createdAt: true
           }
         }
       }
@@ -58,14 +58,14 @@ export async function GET(
       success: true,
       product: {
         ...product,
-        current_quantity: Number(product.current_quantity),
-        alert_threshold: Number(product.alert_threshold),
-        is_low_stock: Number(product.current_quantity) <= Number(product.alert_threshold),
-        stock_ins: product.stock_ins.map(si => ({
+        currentStock: Number(product.currentStock),
+        minStock: Number(product.minStock),
+        is_low_stock: Number(product.currentStock) <= Number(product.minStock),
+        stockIns: product.stockIns.map(si => ({
           ...si,
           quantity: Number(si.quantity)
         })),
-        stock_outs: product.stock_outs.map(so => ({
+        stockOuts: product.stockOuts.map(so => ({
           ...so,
           quantity: Number(so.quantity)
         }))

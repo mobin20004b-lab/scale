@@ -13,11 +13,11 @@ import { faIR } from "date-fns/locale"
 import { FileText } from "lucide-react"
 
 interface StockIn {
-  id: number
+  id: string
   quantity: number
   supplier: string | null
-  reference_number: string | null
-  created_at: Date
+  invoiceNumber: string | null
+  createdAt: Date
   product: {
     name: string
     unit: string
@@ -28,11 +28,11 @@ interface StockIn {
 }
 
 interface StockOut {
-  id: number
+  id: string
   quantity: number
-  recipient: string | null
-  reference_number: string | null
-  created_at: Date
+  customer: string | null
+  invoiceNumber: string | null
+  createdAt: Date
   product: {
     name: string
     unit: string
@@ -58,9 +58,9 @@ export function ReportsTable({ stockIns, stockOuts, type }: ReportsTableProps) {
       unit: item.product.unit,
       quantity: Number(item.quantity),
       party: item.supplier || '-',
-      reference: item.reference_number || '-',
+      reference: item.invoiceNumber || '-',
       user: item.user.full_name,
-      date: new Date(item.created_at)
+      date: new Date(item.createdAt)
     })),
     ...stockOuts.map(item => ({
       id: `out-${item.id}`,
@@ -68,10 +68,10 @@ export function ReportsTable({ stockIns, stockOuts, type }: ReportsTableProps) {
       product: item.product.name,
       unit: item.product.unit,
       quantity: Number(item.quantity),
-      party: item.recipient || '-',
-      reference: item.reference_number || '-',
+      party: item.customer || '-',
+      reference: item.invoiceNumber || '-',
       user: item.user.full_name,
-      date: new Date(item.created_at)
+      date: new Date(item.createdAt)
     }))
   ].sort((a, b) => b.date.getTime() - a.date.getTime())
 

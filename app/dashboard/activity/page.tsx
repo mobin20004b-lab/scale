@@ -9,7 +9,7 @@ export default async function ActivityPage() {
   const activities = await prisma.activity.findMany({
     take: 100,
     orderBy: {
-      created_at: 'desc'
+      createdAt: 'desc'
     },
     include: {
       user: {

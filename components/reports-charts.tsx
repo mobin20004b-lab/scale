@@ -5,9 +5,9 @@ import { BarChart3, TrendingUp, TrendingDown, Activity } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 interface StockIn {
-  id: number
+  id: string
   quantity: number
-  created_at: Date
+  createdAt: Date
   product: {
     name: string
     unit: string
@@ -15,9 +15,9 @@ interface StockIn {
 }
 
 interface StockOut {
-  id: number
+  id: string
   quantity: number
-  created_at: Date
+  createdAt: Date
   product: {
     name: string
     unit: string

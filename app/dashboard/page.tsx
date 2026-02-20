@@ -20,19 +20,19 @@ export default async function DashboardPage() {
     prisma.stockOut.count(),
     prisma.product.findMany({
       where: {
-        current_quantity: {
-          lte: prisma.product.fields.alert_threshold
+        currentStock: {
+          lte: prisma.product.fields.minStock
         }
       },
       take: 5,
       orderBy: {
-        current_quantity: 'asc'
+        currentStock: 'asc'
       }
     }),
     prisma.activity.findMany({
       take: 10,
       orderBy: {
-        created_at: 'desc'
+        createdAt: 'desc'
       },
       include: {
         user: {
@@ -46,7 +46,7 @@ export default async function DashboardPage() {
 
   // Calculate total weight
   const products = await prisma.product.findMany()
-  const totalWeight = products.reduce((sum, p) => sum + Number(p.current_quantity), 0)
+  const totalWeight = products.reduce((sum, p) => sum + Number(p.currentStock), 0)
 
   return (
     <div className="space-y-6">

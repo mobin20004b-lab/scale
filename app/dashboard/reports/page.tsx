@@ -25,19 +25,19 @@ export default async function ReportsPage({
     ? new Date(params.endDate)
     : endOfMonth(new Date())
 
-  const productId = params.productId ? parseInt(params.productId) : undefined
+  const productId = params.productId ? params.productId : undefined
   const type = params.type || "all"
 
   // Fetch data based on filters
   const whereClause: any = {
-    created_at: {
+    createdAt: {
       gte: startDate,
       lte: endDate
     }
   }
 
   if (productId) {
-    whereClause.product_id = productId
+    whereClause.productId = productId
   }
 
   const [stockIns, stockOuts, products] = await Promise.all([
@@ -52,7 +52,7 @@ export default async function ReportsPage({
         }
       },
       orderBy: {
-        created_at: 'desc'
+        createdAt: 'desc'
       }
     }) : Promise.resolve([]),
     
@@ -67,7 +67,7 @@ export default async function ReportsPage({
         }
       },
       orderBy: {
-        created_at: 'desc'
+        createdAt: 'desc'
       }
     }) : Promise.resolve([]),
     

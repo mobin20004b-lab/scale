@@ -6,10 +6,10 @@ import { formatDistanceToNow } from "date-fns"
 import { faIR } from "date-fns/locale"
 
 interface Activity {
-  id: number
+  id: string
   action: string
   details: string | null
-  created_at: Date
+  createdAt: Date
   user: {
     full_name: string
   }
@@ -63,7 +63,7 @@ export function RecentActivity({ activities }: RecentActivityProps) {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(activity.created_at), {
+                      {formatDistanceToNow(new Date(activity.createdAt), {
                         addSuffix: true,
                         locale: faIR
                       })}

@@ -6,7 +6,7 @@ export default async function StockOutPage() {
   const [products, recentStockOuts] = await Promise.all([
     prisma.product.findMany({
       where: {
-        current_quantity: {
+        currentStock: {
           gt: 0
         }
       },
@@ -14,7 +14,7 @@ export default async function StockOutPage() {
     }),
     prisma.stockOut.findMany({
       take: 10,
-      orderBy: { created_at: 'desc' },
+      orderBy: { createdAt: 'desc' },
       include: {
         product: true,
         user: {

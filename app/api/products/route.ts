@@ -10,7 +10,7 @@ export async function GET() {
     }
 
     const products = await prisma.product.findMany({
-      orderBy: { created_at: 'desc' }
+      orderBy: { createdAt: 'desc' }
     })
 
     return NextResponse.json(products)
@@ -30,9 +30,9 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { name, sku, barcode, category, unit, alert_threshold, location, description } = body
+    const { name, sku, barcode, category, unit, minStock, description } = body
 
-    if (!name || !unit || alert_threshold === undefined) {
+    if (!name || !unit || minStock === undefined) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -46,18 +46,19 @@ export async function POST(request: Request) {
         barcode: barcode || null,
         category: category || null,
         unit,
-        alert_threshold: parseFloat(alert_threshold),
-        location: location || null,
+        minStock: parseFloat(minStock),
         description: description || null,
-        current_quantity: 0
+        currentStock: 0
       }
     })
 
     // Log activity
     await prisma.activity.create({
       data: {
-        user_id: parseInt((session.user as any).id),
+        userId: (session.user as any).id,
         action: "ایجاد محصول",
+        entity: "Product",
+        entityId: product.id,
         details: `محصول "${name}" ایجاد شد`
       }
     })

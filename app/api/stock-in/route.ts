@@ -10,9 +10,9 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { product_id, quantity, supplier, reference_number, notes } = body
+    const { productId, quantity, supplier, invoiceNumber, notes } = body
 
-    if (!product_id || !quantity || quantity <= 0) {
+    if (!productId || !quantity || quantity <= 0) {
       return NextResponse.json(
         { error: "Missing or invalid required fields" },
         { status: 400 }
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
     // Get product
     const product = await prisma.product.findUnique({
-      where: { id: product_id }
+      where: { id: productId }
     })
 
     if (!product) {
@@ -31,20 +31,20 @@ export async function POST(request: Request) {
     // Create stock in record
     const stockIn = await prisma.stockIn.create({
       data: {
-        product_id,
-        user_id: parseInt((session.user as any).id),
+        productId,
+        userId: (session.user as any).id,
         quantity: parseFloat(quantity),
         supplier: supplier || null,
-        reference_number: reference_number || null,
+        invoiceNumber: invoiceNumber || null,
         notes: notes || null
       }
     })
 
     // Update product quantity
     await prisma.product.update({
-      where: { id: product_id },
+      where: { id: productId },
       data: {
-        current_quantity: {
+        currentStock: {
           increment: parseFloat(quantity)
         }
       }
@@ -53,8 +53,10 @@ export async function POST(request: Request) {
     // Log activity
     await prisma.activity.create({
       data: {
-        user_id: parseInt((session.user as any).id),
+        userId: (session.user as any).id,
         action: "ورود کالا",
+        entity: "StockIn",
+        entityId: stockIn.id,
         details: `${parseFloat(quantity)} ${product.unit} از "${product.name}" به انبار اضافه شد`
       }
     })

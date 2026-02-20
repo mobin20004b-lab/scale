@@ -36,15 +36,14 @@ import {
 } from "@/components/ui/alert-dialog"
 
 interface Product {
-  id: number
+  id: string
   name: string
   sku: string | null
   barcode: string | null
   category: string | null
   unit: string
-  current_quantity: number
-  alert_threshold: number
-  location: string | null
+  currentStock: number
+  minStock: number
 }
 
 interface ProductsTableProps {
@@ -62,12 +61,12 @@ export function ProductsTable({
 }: ProductsTableProps) {
   const router = useRouter()
   const [search, setSearch] = useState(initialSearch)
-  const [category, setCategory] = useState(initialCategory)
+  const [category, setCategory] = useState(initialCategory || "all")
 
   const handleSearch = () => {
     const params = new URLSearchParams()
     if (search) params.set('search', search)
-    if (category) params.set('category', category)
+    if (category && category !== 'all') params.set('category', category)
     router.push(`/dashboard/products?${params.toString()}`)
   }
 
@@ -89,7 +88,7 @@ export function ProductsTable({
   }
 
   const isLowStock = (product: Product) => {
-    return Number(product.current_quantity) <= Number(product.alert_threshold)
+    return Number(product.currentStock) <= Number(product.minStock)
   }
 
   return (
@@ -112,7 +111,7 @@ export function ProductsTable({
             <SelectValue placeholder="دسته‌بندی" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">همه</SelectItem>
+            <SelectItem value="all">همه</SelectItem>
             {categories.map((cat) => (
               <SelectItem key={cat} value={cat}>
                 {cat}
@@ -120,12 +119,12 @@ export function ProductsTable({
             ))}
           </SelectContent>
         </Select>
-        {(search || category) && (
+        {(search || (category && category !== 'all')) && (
           <Button
             variant="ghost"
             onClick={() => {
               setSearch("")
-              setCategory("")
+              setCategory("all")
               router.push('/dashboard/products')
             }}
           >
@@ -179,11 +178,10 @@ export function ProductsTable({
                   </TableCell>
                   <TableCell>
                     <Badge variant={isLowStock(product) ? "destructive" : "default"}>
-                      {Number(product.current_quantity).toFixed(2)}
+                      {Number(product.currentStock).toFixed(2)}
                     </Badge>
                   </TableCell>
                   <TableCell>{product.unit}</TableCell>
-                  <TableCell>{product.location || "-"}</TableCell>
                   <TableCell>
                     <div className="flex items-center justify-center gap-2">
                       <Link href={`/dashboard/products/${product.id}/edit`}>

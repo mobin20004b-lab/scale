@@ -6,11 +6,11 @@ import { format } from "date-fns"
 import { faIR } from "date-fns/locale"
 
 interface StockIn {
-  id: number
+  id: string
   quantity: number
   supplier: string | null
-  reference_number: string | null
-  created_at: Date
+  invoiceNumber: string | null
+  createdAt: Date
   product: {
     name: string
     unit: string
@@ -63,16 +63,16 @@ export function StockInList({ stockIns }: StockInListProps) {
                     </p>
                   )}
                   
-                  {stockIn.reference_number && (
+                  {stockIn.invoiceNumber && (
                     <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">شماره مرجع:</span> {stockIn.reference_number}
+                      <span className="font-medium">شماره فاکتور:</span> {stockIn.invoiceNumber}
                     </p>
                   )}
                   
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
                     <span>{stockIn.user.full_name}</span>
                     <span>
-                      {format(new Date(stockIn.created_at), 'yyyy/MM/dd HH:mm', { locale: faIR })}
+                      {format(new Date(stockIn.createdAt), 'yyyy/MM/dd HH:mm', { locale: faIR })}
                     </span>
                   </div>
                 </div>

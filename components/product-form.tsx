@@ -18,8 +18,7 @@ const productSchema = z.object({
   barcode: z.string().optional(),
   category: z.string().optional(),
   unit: z.string().min(1, "واحد اندازه‌گیری الزامی است"),
-  alert_threshold: z.string().min(0, "حداقل موجودی باید مثبت باشد"),
-  location: z.string().optional(),
+  minStock: z.string().min(0, "حداقل موجودی باید مثبت باشد"),
   description: z.string().optional(),
 })
 
@@ -45,8 +44,7 @@ export function ProductForm({ product }: ProductFormProps) {
       barcode: product.barcode || "",
       category: product.category || "",
       unit: product.unit,
-      alert_threshold: product.alert_threshold.toString(),
-      location: product.location || "",
+      minStock: product.minStock.toString(),
       description: product.description || "",
     } : {
       unit: "کیلوگرم"
@@ -68,7 +66,7 @@ export function ProductForm({ product }: ProductFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
-          alert_threshold: parseFloat(data.alert_threshold)
+          minStock: parseFloat(data.minStock)
         })
       })
 
@@ -153,31 +151,19 @@ export function ProductForm({ product }: ProductFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="alert_threshold">حداقل موجودی (آستانه هشدار) *</Label>
+              <Label htmlFor="minStock">حداقل موجودی (آستانه هشدار) *</Label>
               <Input
-                id="alert_threshold"
+                id="minStock"
                 type="number"
                 step="0.01"
-                {...register("alert_threshold")}
+                {...register("minStock")}
                 disabled={isLoading}
                 dir="ltr"
               />
-              {errors.alert_threshold && (
-                <p className="text-sm text-destructive">{errors.alert_threshold.message}</p>
+              {errors.minStock && (
+                <p className="text-sm text-destructive">{errors.minStock.message}</p>
               )}
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="location">موقعیت انبار</Label>
-              <Input
-                id="location"
-                {...register("location")}
-                disabled={isLoading}
-                dir="rtl"
-                placeholder="قفسه A، انبار 1، ..."
-              />
-            </div>
-          </div>
 
           <div className="space-y-2">
             <Label htmlFor="description">توضیحات</Label>

@@ -17,39 +17,48 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { product_id, quantity, supplier, reference_number, notes } = body
+    const { productId, quantity, supplier, invoiceNumber, notes } = body
 
-    if (!product_id || !quantity || quantity <= 0) {
+    if (!productId || !quantity || quantity <= 0) {
       return NextResponse.json(
-        { error: "Missing or invalid required fields: product_id, quantity" },
+        { error: "Missing or invalid required fields: productId, quantity" },
         { status: 400 }
       )
     }
 
     const product = await prisma.product.findUnique({
-      where: { id: product_id }
+      where: { id: productId }
     })
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
     }
 
-    // Use system user (id: 1) for external API calls
+    // Get system admin user for external API calls
+    const systemUser = await prisma.user.findFirst({
+      where: { role: "ADMIN" }
+    })
+
+    if (!systemUser) {
+      return NextResponse.json({ error: "System user not found" }, { status: 500 })
+    }
+
+    // Create stock in record
     const stockIn = await prisma.stockIn.create({
       data: {
-        product_id,
-        user_id: 1,
+        productId,
+        userId: systemUser.id,
         quantity: parseFloat(quantity),
         supplier: supplier || null,
-        reference_number: reference_number || null,
+        invoiceNumber: invoiceNumber || null,
         notes: notes || null
       }
     })
 
     await prisma.product.update({
-      where: { id: product_id },
+      where: { id: productId },
       data: {
-        current_quantity: {
+        currentStock: {
           increment: parseFloat(quantity)
         }
       }
@@ -57,8 +66,10 @@ export async function POST(request: Request) {
 
     await prisma.activity.create({
       data: {
-        user_id: 1,
+        userId: systemUser.id,
         action: "ورود کالا (API)",
+        entity: "StockIn",
+        entityId: stockIn.id,
         details: `${parseFloat(quantity)} ${product.unit} از "${product.name}" از طریق API اضافه شد`
       }
     })
@@ -68,9 +79,9 @@ export async function POST(request: Request) {
       message: "Stock in recorded successfully",
       stock_in: {
         id: stockIn.id,
-        product_id: stockIn.product_id,
+        productId: stockIn.productId,
         quantity: Number(stockIn.quantity),
-        created_at: stockIn.created_at
+        createdAt: stockIn.createdAt
       }
     }, { status: 201 })
   } catch (error) {

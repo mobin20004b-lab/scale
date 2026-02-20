@@ -22,22 +22,22 @@ import { BarcodeScanner } from "./barcode-scanner"
 import { Badge } from "./ui/badge"
 
 const stockOutSchema = z.object({
-  product_id: z.string().min(1, "محصول را انتخاب کنید"),
+  productId: z.string().min(1, "محصول را انتخاب کنید"),
   quantity: z.string().min(0.01, "مقدار باید بیشتر از صفر باشد"),
-  recipient: z.string().optional(),
-  reference_number: z.string().optional(),
+  customer: z.string().optional(),
+  invoiceNumber: z.string().optional(),
   notes: z.string().optional(),
 })
 
 type StockOutFormData = z.infer<typeof stockOutSchema>
 
 interface Product {
-  id: number
+  id: string
   name: string
   barcode: string | null
   unit: string
-  current_quantity: number
-  alert_threshold: number
+  currentStock: number
+  minStock: number
 }
 
 interface StockOutFormProps {
@@ -66,7 +66,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
   const handleBarcodeScanned = (barcode: string) => {
     const product = products.find(p => p.barcode === barcode)
     if (product) {
-      setValue("product_id", product.id.toString())
+      setValue("productId", product.id.toString())
       setSelectedProduct(product)
       setShowScanner(false)
       toast.success(`محصول پیدا شد: ${product.name}`)
@@ -79,7 +79,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
     if (!selectedProduct) return
 
     const requestedQty = parseFloat(data.quantity)
-    if (requestedQty > Number(selectedProduct.current_quantity)) {
+    if (requestedQty > Number(selectedProduct.currentStock)) {
       toast.error("موجودی کافی نیست")
       return
     }
@@ -92,7 +92,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
-          product_id: parseInt(data.product_id),
+          productId: data.productId,
           quantity: requestedQty
         })
       })
@@ -114,11 +114,11 @@ export function StockOutForm({ products }: StockOutFormProps) {
   }
 
   const remainingAfterOut = selectedProduct && quantity
-    ? Number(selectedProduct.current_quantity) - parseFloat(quantity)
+    ? Number(selectedProduct.currentStock) - parseFloat(quantity)
     : null
 
   const willBeLowStock = remainingAfterOut !== null && 
-    remainingAfterOut <= Number(selectedProduct?.alert_threshold)
+    remainingAfterOut <= Number(selectedProduct?.minStock)
 
   return (
     <Card>
@@ -135,7 +135,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
             <div className="flex gap-2">
               <Select
                 onValueChange={(value) => {
-                  setValue("product_id", value)
+                  setValue("productId", value)
                   const product = products.find(p => p.id.toString() === value)
                   setSelectedProduct(product || null)
                 }}
@@ -147,7 +147,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
                 <SelectContent>
                   {products.map((product) => (
                     <SelectItem key={product.id} value={product.id.toString()}>
-                      {product.name} ({Number(product.current_quantity).toFixed(2)} {product.unit})
+                      {product.name} ({Number(product.currentStock).toFixed(2)} {product.unit})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -161,8 +161,8 @@ export function StockOutForm({ products }: StockOutFormProps) {
                 <Scan className="size-4" />
               </Button>
             </div>
-            {errors.product_id && (
-              <p className="text-sm text-destructive">{errors.product_id.message}</p>
+            {errors.productId && (
+              <p className="text-sm text-destructive">{errors.productId.message}</p>
             )}
           </div>
 
@@ -175,7 +175,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">موجودی فعلی:</span>
                 <Badge>
-                  {Number(selectedProduct.current_quantity).toFixed(2)} {selectedProduct.unit}
+                  {Number(selectedProduct.currentStock).toFixed(2)} {selectedProduct.unit}
                 </Badge>
               </div>
               {willBeLowStock && (
@@ -204,21 +204,21 @@ export function StockOutForm({ products }: StockOutFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="recipient">گیرنده</Label>
+            <Label htmlFor="customer">نام مشتری</Label>
             <Input
-              id="recipient"
-              {...register("recipient")}
+              id="customer"
+              {...register("customer")}
               disabled={isLoading}
               dir="rtl"
-              placeholder="نام گیرنده"
+              placeholder="نام مشتری"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="reference_number">شماره مرجع</Label>
+            <Label htmlFor="invoiceNumber">شماره فاکتور</Label>
             <Input
-              id="reference_number"
-              {...register("reference_number")}
+              id="invoiceNumber"
+              {...register("invoiceNumber")}
               disabled={isLoading}
               dir="ltr"
               placeholder="شماره فاکتور یا سند"

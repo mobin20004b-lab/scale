@@ -31,7 +31,7 @@ export default async function ProductsPage({
     prisma.product.findMany({
       where: whereClause,
       orderBy: {
-        created_at: 'desc'
+        createdAt: 'desc'
       }
     }),
     prisma.product.findMany({

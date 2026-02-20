@@ -25,9 +25,8 @@ export async function GET(request: Request) {
           barcode: true,
           category: true,
           unit: true,
-          current_quantity: true,
-          alert_threshold: true,
-          location: true
+          currentStock: true,
+          minStock: true
         },
         orderBy: {
           name: 'asc'
@@ -37,10 +36,10 @@ export async function GET(request: Request) {
       prisma.stockOut.count()
     ])
 
-    const totalWeight = products.reduce((sum, p) => sum + Number(p.current_quantity), 0)
+    const totalWeight = products.reduce((sum, p) => sum + Number(p.currentStock), 0)
     
     const lowStockProducts = products.filter(
-      p => Number(p.current_quantity) <= Number(p.alert_threshold)
+      p => Number(p.currentStock) <= Number(p.minStock)
     )
 
     const productsByCategory = products.reduce((acc, product) => {
@@ -50,9 +49,9 @@ export async function GET(request: Request) {
       }
       acc[category].push({
         ...product,
-        current_quantity: Number(product.current_quantity),
-        alert_threshold: Number(product.alert_threshold),
-        is_low_stock: Number(product.current_quantity) <= Number(product.alert_threshold)
+        currentStock: Number(product.currentStock),
+        minStock: Number(product.minStock),
+        is_low_stock: Number(product.currentStock) <= Number(product.minStock)
       })
       return acc
     }, {} as Record<string, any[]>)
@@ -69,8 +68,8 @@ export async function GET(request: Request) {
       low_stock_products: lowStockProducts.map(p => ({
         id: p.id,
         name: p.name,
-        current_quantity: Number(p.current_quantity),
-        alert_threshold: Number(p.alert_threshold),
+        currentStock: Number(p.currentStock),
+        minStock: Number(p.minStock),
         unit: p.unit
       })),
       products_by_category: productsByCategory,

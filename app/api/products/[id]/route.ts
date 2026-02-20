@@ -14,18 +14,17 @@ export async function PUT(
 
     const { id } = await context.params
     const body = await request.json()
-    const { name, sku, barcode, category, unit, alert_threshold, location, description } = body
+    const { name, sku, barcode, category, unit, minStock, description } = body
 
     const product = await prisma.product.update({
-      where: { id: parseInt(id) },
+      where: { id },
       data: {
         name,
         sku: sku || null,
         barcode: barcode || null,
         category: category || null,
         unit,
-        alert_threshold: parseFloat(alert_threshold),
-        location: location || null,
+        minStock: parseFloat(minStock),
         description: description || null,
       }
     })
@@ -33,8 +32,10 @@ export async function PUT(
     // Log activity
     await prisma.activity.create({
       data: {
-        user_id: parseInt((session.user as any).id),
+        userId: (session.user as any).id,
         action: "ویرایش محصول",
+        entity: "Product",
+        entityId: product.id,
         details: `محصول "${name}" ویرایش شد`
       }
     })
@@ -62,7 +63,7 @@ export async function DELETE(
     const { id } = await context.params
     
     const product = await prisma.product.findUnique({
-      where: { id: parseInt(id) }
+      where: { id }
     })
 
     if (!product) {
@@ -70,14 +71,16 @@ export async function DELETE(
     }
 
     await prisma.product.delete({
-      where: { id: parseInt(id) }
+      where: { id }
     })
 
     // Log activity
     await prisma.activity.create({
       data: {
-        user_id: parseInt((session.user as any).id),
+        userId: (session.user as any).id,
         action: "حذف محصول",
+        entity: "Product",
+        entityId: product.id,
         details: `محصول "${product.name}" حذف شد`
       }
     })

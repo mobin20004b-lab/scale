@@ -28,9 +28,8 @@ export async function GET(request: Request) {
         barcode: true,
         category: true,
         unit: true,
-        current_quantity: true,
-        alert_threshold: true,
-        location: true,
+        currentStock: true,
+        minStock: true,
         description: true
       },
       orderBy: {
@@ -43,9 +42,9 @@ export async function GET(request: Request) {
       count: products.length,
       products: products.map(p => ({
         ...p,
-        current_quantity: Number(p.current_quantity),
-        alert_threshold: Number(p.alert_threshold),
-        is_low_stock: Number(p.current_quantity) <= Number(p.alert_threshold)
+        currentStock: Number(p.currentStock),
+        minStock: Number(p.minStock),
+        is_low_stock: Number(p.currentStock) <= Number(p.minStock)
       }))
     })
   } catch (error) {

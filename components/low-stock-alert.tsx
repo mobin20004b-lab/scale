@@ -6,10 +6,10 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 interface Product {
-  id: number
+  id: string
   name: string
-  current_quantity: number
-  alert_threshold: number
+  currentStock: number
+  minStock: number
   unit: string
 }
 
@@ -48,10 +48,10 @@ export function LowStockAlert({ products }: LowStockAlertProps) {
                     <p className="font-medium">{product.name}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <Badge variant="destructive" className="text-xs">
-                        {Number(product.current_quantity).toFixed(2)} {product.unit}
+                        {Number(product.currentStock).toFixed(2)} {product.unit}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        حداقل: {Number(product.alert_threshold).toFixed(2)} {product.unit}
+                        حداقل: {Number(product.minStock).toFixed(2)} {product.unit}
                       </span>
                     </div>
                   </div>

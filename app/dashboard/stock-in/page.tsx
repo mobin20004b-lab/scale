@@ -9,7 +9,7 @@ export default async function StockInPage() {
     }),
     prisma.stockIn.findMany({
       take: 10,
-      orderBy: { created_at: 'desc' },
+      orderBy: { createdAt: 'desc' },
       include: {
         product: true,
         user: {

@@ -21,17 +21,17 @@ import { Loader2, Scan, Plus } from "lucide-react"
 import { BarcodeScanner } from "./barcode-scanner"
 
 const stockInSchema = z.object({
-  product_id: z.string().min(1, "محصول را انتخاب کنید"),
+  productId: z.string().min(1, "محصول را انتخاب کنید"),
   quantity: z.string().min(0.01, "مقدار باید بیشتر از صفر باشد"),
   supplier: z.string().optional(),
-  reference_number: z.string().optional(),
+  invoiceNumber: z.string().optional(),
   notes: z.string().optional(),
 })
 
 type StockInFormData = z.infer<typeof stockInSchema>
 
 interface Product {
-  id: number
+  id: string
   name: string
   barcode: string | null
   unit: string
@@ -60,7 +60,7 @@ export function StockInForm({ products }: StockInFormProps) {
   const handleBarcodeScanned = (barcode: string) => {
     const product = products.find(p => p.barcode === barcode)
     if (product) {
-      setValue("product_id", product.id.toString())
+      setValue("productId", product.id.toString())
       setSelectedProduct(product)
       setShowScanner(false)
       toast.success(`محصول پیدا شد: ${product.name}`)
@@ -78,7 +78,7 @@ export function StockInForm({ products }: StockInFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
-          product_id: parseInt(data.product_id),
+          productId: data.productId,
           quantity: parseFloat(data.quantity)
         })
       })
@@ -114,7 +114,7 @@ export function StockInForm({ products }: StockInFormProps) {
             <div className="flex gap-2">
               <Select
                 onValueChange={(value) => {
-                  setValue("product_id", value)
+                  setValue("productId", value)
                   const product = products.find(p => p.id.toString() === value)
                   setSelectedProduct(product || null)
                 }}
@@ -140,8 +140,8 @@ export function StockInForm({ products }: StockInFormProps) {
                 <Scan className="size-4" />
               </Button>
             </div>
-            {errors.product_id && (
-              <p className="text-sm text-destructive">{errors.product_id.message}</p>
+            {errors.productId && (
+              <p className="text-sm text-destructive">{errors.productId.message}</p>
             )}
           </div>
 
@@ -185,10 +185,10 @@ export function StockInForm({ products }: StockInFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="reference_number">شماره مرجع</Label>
+            <Label htmlFor="invoiceNumber">شماره فاکتور</Label>
             <Input
-              id="reference_number"
-              {...register("reference_number")}
+              id="invoiceNumber"
+              {...register("invoiceNumber")}
               disabled={isLoading}
               dir="ltr"
               placeholder="شماره فاکتور یا سند"
