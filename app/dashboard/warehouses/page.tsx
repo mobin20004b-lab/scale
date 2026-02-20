@@ -1,15 +1,15 @@
-import { WarehouseManager } from "@/components/warehouse-manager"
-import { prisma } from "@/lib/prisma"
+import { WarehouseManager } from "@/components/warehouse-manager";
+import { prisma } from "@/lib/prisma";
 
 export default async function WarehousesPage() {
   const warehouses = await prisma.warehouse.findMany({
     include: {
       _count: {
-        select: { scales: true },
+        select: { scales: true, stockIns: true },
       },
     },
     orderBy: { createdAt: "desc" },
-  })
+  });
 
   return (
     <div className="space-y-6">
@@ -19,5 +19,5 @@ export default async function WarehousesPage() {
       </div>
       <WarehouseManager warehouses={warehouses} />
     </div>
-  )
+  );
 }
