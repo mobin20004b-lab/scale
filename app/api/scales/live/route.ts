@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getScaleHealthSnapshot } from "@/lib/scale-health"
 
 export async function GET(request: Request) {
   try {
@@ -33,7 +34,17 @@ export async function GET(request: Request) {
       },
     })
 
-    return NextResponse.json({ scales })
+    const scalesWithHealth = scales.map((scale) => {
+      const healthSnapshot = getScaleHealthSnapshot(scale.lastWeightAt)
+
+      return {
+        ...scale,
+        health: healthSnapshot.health,
+        lastReadingAgeMs: healthSnapshot.lastReadingAgeMs,
+      }
+    })
+
+    return NextResponse.json({ scales: scalesWithHealth })
   } catch (error) {
     console.error("[v0] Error fetching live scales:", error)
     return NextResponse.json(

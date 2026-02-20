@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatDistanceToNowStrict } from "date-fns";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { DateTimeText } from "@/components/date-time-text";
+import { getScaleHealthSnapshot, ScaleHealth } from "@/lib/scale-health";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Empty,
@@ -89,12 +91,18 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const [search, setSearch] = useState("");
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [healthFilter, setHealthFilter] = useState("all");
   const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [liveWeights, setLiveWeights] = useState<
     Record<
       string,
-      { lastWeight: number | null; lastWeightAt: string | Date | null }
+      {
+        lastWeight: number | null;
+        lastWeightAt: string | Date | null;
+        health: ScaleHealth;
+        lastReadingAgeMs: number | null;
+      }
     >
   >({});
   const [isLoadingWeights, setIsLoadingWeights] = useState(false);
@@ -117,6 +125,8 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
 
   const visibleScales = useMemo(() => {
     return localScales.filter((scale) => {
+      const live = liveWeights[scale.id];
+      const health = live?.health ?? getScaleHealthSnapshot(scale.lastWeightAt).health;
       const matchesSearch = scale.name
         .toLowerCase()
         .includes(search.trim().toLowerCase());
@@ -125,10 +135,20 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "active" ? scale.isActive : !scale.isActive);
+      const matchesHealth = healthFilter === "all" || health === healthFilter;
 
-      return matchesSearch && matchesWarehouse && matchesStatus;
+      return (
+        matchesSearch && matchesWarehouse && matchesStatus && matchesHealth
+      );
     });
-  }, [localScales, search, warehouseFilter, statusFilter]);
+  }, [
+    localScales,
+    search,
+    warehouseFilter,
+    statusFilter,
+    healthFilter,
+    liveWeights,
+  ]);
 
   const visibleScaleIds = useMemo(
     () => visibleScales.map((scale) => scale.id),
@@ -167,19 +187,28 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
               id: string;
               lastWeight: number | null;
               lastWeightAt: string | null;
+              health: ScaleHealth;
+              lastReadingAgeMs: number | null;
             }>;
           };
 
           if (!cancelled) {
             const nextWeights: Record<
               string,
-              { lastWeight: number | null; lastWeightAt: string | null }
+              {
+                lastWeight: number | null;
+                lastWeightAt: string | null;
+                health: ScaleHealth;
+                lastReadingAgeMs: number | null;
+              }
             > = {};
 
             payload.scales.forEach((scale) => {
               nextWeights[scale.id] = {
                 lastWeight: scale.lastWeight,
                 lastWeightAt: scale.lastWeightAt,
+                health: scale.health,
+                lastReadingAgeMs: scale.lastReadingAgeMs,
               };
             });
 
@@ -387,7 +416,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
         </Dialog>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid gap-2 md:grid-cols-3">
+        <div className="grid gap-2 md:grid-cols-4">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -416,6 +445,17 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
               <SelectItem value="inactive">فقط غیرفعال</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={healthFilter} onValueChange={setHealthFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="فیلتر سلامت" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">همه سلامت‌ها</SelectItem>
+              <SelectItem value="ONLINE">آنلاین</SelectItem>
+              <SelectItem value="STALE">مردد</SelectItem>
+              <SelectItem value="OFFLINE">آفلاین</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="text-xs text-muted-foreground">
@@ -426,6 +466,25 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           const live = liveWeights[scale.id];
           const lastWeight = live?.lastWeight ?? scale.lastWeight;
           const lastWeightAt = live?.lastWeightAt ?? scale.lastWeightAt;
+          const health = live?.health ?? getScaleHealthSnapshot(scale.lastWeightAt).health;
+          const healthLabel =
+            health === "ONLINE" ? "آنلاین" : health === "STALE" ? "مردد" : "آفلاین";
+          const healthVariant =
+            health === "ONLINE"
+              ? "default"
+              : health === "STALE"
+                ? "secondary"
+                : "destructive";
+          const fallbackAgeMs = getScaleHealthSnapshot(
+            scale.lastWeightAt,
+          ).lastReadingAgeMs;
+          const ageMs = live?.lastReadingAgeMs ?? fallbackAgeMs;
+          const healthAgeLabel =
+            ageMs === null
+              ? "بدون داده"
+              : formatDistanceToNowStrict(new Date(Date.now() - ageMs), {
+                  addSuffix: true,
+                });
 
           return (
             <div key={scale.id} className="rounded-lg border p-4 space-y-2">
@@ -546,16 +605,18 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                 <Badge variant={scale.isActive ? "default" : "secondary"}>
                   {scale.isActive ? "فعال" : "غیرفعال"}
                 </Badge>
+                <Badge variant={healthVariant}>{healthLabel}</Badge>
                 <Badge>
                   {lastWeight !== null
                     ? `${Number(lastWeight).toFixed(2)} گرم`
                     : "بدون وزن"}
                 </Badge>
                 <span className="text-muted-foreground">
+                  سن آخرین قرائت: {healthAgeLabel}
+                  {" · "}
                   {lastWeightAt ? (
                     <>
-                      آخرین دریافت:{" "}
-                      <DateTimeText value={lastWeightAt} showTimeZone />
+                      آخرین دریافت: <DateTimeText value={lastWeightAt} showTimeZone />
                     </>
                   ) : (
                     "داده‌ای دریافت نشده"
@@ -614,6 +675,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                   setSearch("");
                   setWarehouseFilter("all");
                   setStatusFilter("all");
+                  setHealthFilter("all");
                 }}
               >
                 پاک کردن فیلترها
