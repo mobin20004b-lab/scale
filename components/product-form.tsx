@@ -164,6 +164,7 @@ export function ProductForm({ product }: ProductFormProps) {
                 <p className="text-sm text-destructive">{errors.minStock.message}</p>
               )}
             </div>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="description">توضیحات</Label>
@@ -174,7 +175,7 @@ export function ProductForm({ product }: ProductFormProps) {
               dir="rtl"
               className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               placeholder="توضیحات تکمیلی درباره محصول..."
-            />
+            ></textarea>
           </div>
 
           <div className="flex gap-3">

@@ -25,7 +25,7 @@ export default async function ReportsPage({
     ? new Date(params.endDate)
     : endOfMonth(new Date())
 
-  const productId = params.productId ? params.productId : undefined
+  const productId = params.productId && params.productId !== "all" ? params.productId : undefined
   const type = params.type || "all"
 
   // Fetch data based on filters

@@ -39,14 +39,14 @@ export function ReportsFilters({
   const router = useRouter()
   const [startDate, setStartDate] = useState(initialStartDate)
   const [endDate, setEndDate] = useState(initialEndDate)
-  const [productId, setProductId] = useState(initialProductId || "")
+  const [productId, setProductId] = useState(initialProductId || "all")
   const [type, setType] = useState(initialType)
 
   const handleFilter = () => {
     const params = new URLSearchParams()
     if (startDate) params.set('startDate', startDate)
     if (endDate) params.set('endDate', endDate)
-    if (productId) params.set('productId', productId)
+    if (productId && productId !== "all") params.set('productId', productId)
     if (type) params.set('type', type)
     
     router.push(`/dashboard/reports?${params.toString()}`)
@@ -57,7 +57,7 @@ export function ReportsFilters({
       const params = new URLSearchParams()
       if (startDate) params.set('startDate', startDate)
       if (endDate) params.set('endDate', endDate)
-      if (productId) params.set('productId', productId)
+      if (productId && productId !== "all") params.set('productId', productId)
       if (type) params.set('type', type)
       
       const response = await fetch(`/api/reports/export?${params.toString()}`)
@@ -112,7 +112,7 @@ export function ReportsFilters({
                 <SelectValue placeholder="همه محصولات" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">همه محصولات</SelectItem>
+                <SelectItem value="all">همه محصولات</SelectItem>
                 {products.map((product) => (
                   <SelectItem key={product.id} value={product.id.toString()}>
                     {product.name}
