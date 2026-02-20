@@ -1,5 +1,5 @@
-import { ScaleManager } from "@/components/scale-manager"
-import { prisma } from "@/lib/prisma"
+import { ScaleManager } from "@/components/scale-manager";
+import { prisma } from "@/lib/prisma";
 
 export default async function ScalesPage() {
   const [scales, warehouses] = await Promise.all([
@@ -8,6 +8,9 @@ export default async function ScalesPage() {
         warehouse: {
           select: { id: true, name: true },
         },
+        _count: {
+          select: { stockIns: true },
+        },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -15,7 +18,7 @@ export default async function ScalesPage() {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
-  ])
+  ]);
 
   return (
     <div className="space-y-6">
@@ -25,5 +28,5 @@ export default async function ScalesPage() {
       </div>
       <ScaleManager scales={scales} warehouses={warehouses} />
     </div>
-  )
+  );
 }

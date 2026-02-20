@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Table,
@@ -9,12 +9,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -52,6 +52,10 @@ interface Product {
   unit: string;
   currentStock: number;
   minStock: number;
+  _count?: {
+    stockIns: number;
+    stockOuts: number;
+  };
 }
 
 interface ProductsTableProps {
@@ -74,6 +78,20 @@ export function ProductsTable({
   const [category, setCategory] = useState(initialCategory || "all");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [localProducts, setLocalProducts] = useState(products);
+  const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  );
+
+  useEffect(() => {
+    setLocalProducts(products);
+  }, [products]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(pendingDeletes.current).forEach(clearTimeout);
+    };
+  }, []);
 
   const hasFilters = Boolean(search || (category && category !== "all"));
 
@@ -95,21 +113,21 @@ export function ProductsTable({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [products.length, pageSize]);
+  }, [localProducts.length, pageSize]);
 
   const paginatedProducts = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return products.slice(start, start + pageSize);
-  }, [products, currentPage, pageSize]);
+    return localProducts.slice(start, start + pageSize);
+  }, [localProducts, currentPage, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(products.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(localProducts.length / pageSize));
   const rangeStart =
-    products.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const rangeEnd = Math.min(currentPage * pageSize, products.length);
+    localProducts.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const rangeEnd = Math.min(currentPage * pageSize, localProducts.length);
 
-  const handleDelete = async (id: string) => {
+  const executeDelete = async (product: Product) => {
     try {
-      const response = await fetch(`/api/products/${id}`, {
+      const response = await fetch(`/api/products/${product.id}`, {
         method: "DELETE",
       });
 
@@ -117,11 +135,40 @@ export function ProductsTable({
         toast.success("محصول با موفقیت حذف شد");
         router.refresh();
       } else {
+        setLocalProducts((previous) => [product, ...previous]);
         toast.error("خطا در حذف محصول");
       }
     } catch {
+      setLocalProducts((previous) => [product, ...previous]);
       toast.error("خطا در حذف محصول");
     }
+  };
+
+  const handleDelete = (product: Product) => {
+    setLocalProducts((previous) =>
+      previous.filter((item) => item.id !== product.id),
+    );
+
+    pendingDeletes.current[product.id] = setTimeout(() => {
+      delete pendingDeletes.current[product.id];
+      executeDelete(product);
+    }, 5000);
+
+    toast("محصول برای حذف علامت‌گذاری شد", {
+      description: "برای لغو حذف، تا ۵ ثانیه آینده بازگردانی را بزنید.",
+      action: {
+        label: "بازگردانی",
+        onClick: () => {
+          const timer = pendingDeletes.current[product.id];
+          if (timer) {
+            clearTimeout(timer);
+            delete pendingDeletes.current[product.id];
+            setLocalProducts((previous) => [product, ...previous]);
+            toast.success("حذف محصول لغو شد");
+          }
+        },
+      },
+    });
   };
 
   const isLowStock = (product: Product) => {
@@ -170,7 +217,7 @@ export function ProductsTable({
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
-          نمایش {rangeStart}–{rangeEnd} از {products.length}
+          نمایش {rangeStart}–{rangeEnd} از {localProducts.length}
         </span>
         <div className="flex items-center gap-2">
           <span>تعداد در صفحه</span>
@@ -223,7 +270,7 @@ export function ProductsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {products.length === 0 ? (
+            {localProducts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="py-12">
                   <div className="flex flex-col items-center justify-center gap-3 text-center">
@@ -258,94 +305,121 @@ export function ProductsTable({
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedProducts.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell className="font-medium sticky left-0 z-10 bg-background">
-                    <div className="flex items-center gap-2">
-                      {product.name}
-                      {isLowStock(product) && (
-                        <AlertTriangle className="size-4 text-orange-600" />
+              paginatedProducts.map((product) => {
+                const relatedRecords =
+                  (product._count?.stockIns ?? 0) +
+                  (product._count?.stockOuts ?? 0);
+
+                return (
+                  <TableRow key={product.id}>
+                    <TableCell className="font-medium sticky left-0 z-10 bg-background">
+                      <div className="flex items-center gap-2">
+                        {product.name}
+                        {isLowStock(product) && (
+                          <AlertTriangle className="size-4 text-orange-600" />
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{product.sku || "-"}</TableCell>
+                    <TableCell dir="ltr" className="text-right">
+                      {product.barcode || "-"}
+                    </TableCell>
+                    <TableCell>
+                      {product.category ? (
+                        <Badge variant="secondary">{product.category}</Badge>
+                      ) : (
+                        "-"
                       )}
-                    </div>
-                  </TableCell>
-                  <TableCell>{product.sku || "-"}</TableCell>
-                  <TableCell dir="ltr" className="text-right">
-                    {product.barcode || "-"}
-                  </TableCell>
-                  <TableCell>
-                    {product.category ? (
-                      <Badge variant="secondary">{product.category}</Badge>
-                    ) : (
-                      "-"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={isLowStock(product) ? "destructive" : "default"}
-                    >
-                      {Number(product.currentStock).toFixed(2)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{product.unit}</TableCell>
-                  <TableCell>
-                    <span className={isLowStock(product) ? "text-amber-700 dark:text-amber-300 font-medium" : "text-emerald-700 dark:text-emerald-300 font-medium"}>{isLowStock(product) ? "کم‌موجودی" : "عادی"}</span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-center gap-2">
-                      <Link href={`/dashboard/products/${product.id}/edit`}>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`ویرایش ${product.name}`}
-                        >
-                          <Edit className="size-4" />
-                        </Button>
-                      </Link>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          isLowStock(product) ? "destructive" : "default"
+                        }
+                      >
+                        {Number(product.currentStock).toFixed(2)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{product.unit}</TableCell>
+                    <TableCell>
+                      <span
+                        className={
+                          isLowStock(product)
+                            ? "text-amber-700 dark:text-amber-300 font-medium"
+                            : "text-emerald-700 dark:text-emerald-300 font-medium"
+                        }
+                      >
+                        {isLowStock(product) ? "کم‌موجودی" : "عادی"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-center gap-2 border-r pr-2">
+                        <Link href={`/dashboard/products/${product.id}/edit`}>
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={`حذف ${product.name}`}
+                            aria-label={`ویرایش ${product.name}`}
                           >
-                            <Trash2 className="size-4 text-destructive" />
+                            <Edit className="size-4" />
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>حذف محصول</AlertDialogTitle>
-                            <AlertDialogDescription className="space-y-2">
-                              <span className="block">
-                                این عمل غیرقابل بازگشت است.
-                              </span>
-                              <span className="block">
-                                نام محصول: <strong>{product.name}</strong>
-                              </span>
-                              <span className="block">
-                                کد محصول: <strong>{product.sku || "-"}</strong>
-                              </span>
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>انصراف</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(product.id)}
+                        </Link>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                              aria-label={`حذف ${product.name}`}
                             >
-                              حذف دائمی
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>حذف محصول</AlertDialogTitle>
+                              <AlertDialogDescription className="space-y-2">
+                                <span className="block">
+                                  این عمل غیرقابل بازگشت است.
+                                </span>
+                                <span className="block">
+                                  نام محصول: <strong>{product.name}</strong>
+                                </span>
+                                <span className="block">
+                                  کد محصول:{" "}
+                                  <strong>{product.sku || "-"}</strong>
+                                </span>
+                                {relatedRecords > 0 && (
+                                  <span className="block text-amber-600 dark:text-amber-400">
+                                    هشدار: این محصول{" "}
+                                    {product._count?.stockIns ?? 0} ورود و{" "}
+                                    {product._count?.stockOuts ?? 0} خروج
+                                    ثبت‌شده دارد.
+                                  </span>
+                                )}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>انصراف</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                onClick={() => handleDelete(product)}
+                              >
+                                حذف دائمی
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
 
         <div className="space-y-3 p-3 md:hidden">
-          {products.length === 0 ? (
+          {localProducts.length === 0 ? (
             <div className="rounded-lg border p-6">
               <div className="flex flex-col items-center justify-center gap-3 text-center">
                 <PackageSearch className="size-10 text-muted-foreground" />
@@ -378,92 +452,120 @@ export function ProductsTable({
               </div>
             </div>
           ) : (
-            paginatedProducts.map((product) => (
-              <div key={product.id} className="rounded-lg border p-4 space-y-3 transition-colors hover:bg-muted/40">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="font-semibold flex items-center gap-2">
-                    {product.name}
-                    {isLowStock(product) && (
-                      <AlertTriangle className="size-4 text-orange-600" />
-                    )}
-                  </div>
-                  <Badge
-                    variant={isLowStock(product) ? "destructive" : "default"}
-                  >
-                    {Number(product.currentStock).toFixed(2)} {product.unit}
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-                  <span className="text-muted-foreground">کد محصول</span>
-                  <span>{product.sku || "-"}</span>
-                  <span className="text-muted-foreground">بارکد</span>
-                  <span dir="ltr" className="text-right">
-                    {product.barcode || "-"}
-                  </span>
-                  <span className="text-muted-foreground">دسته‌بندی</span>
-                  <span>
-                    {product.category ? (
-                      <Badge variant="secondary">{product.category}</Badge>
-                    ) : (
-                      "-"
-                    )}
-                  </span>
-                  <span className="text-muted-foreground">وضعیت</span>
-                  <span><span className={isLowStock(product) ? "text-amber-700 dark:text-amber-300 font-medium" : "text-emerald-700 dark:text-emerald-300 font-medium"}>{isLowStock(product) ? "کم‌موجودی" : "عادی"}</span></span>
-                </div>
-                <div className="flex items-center justify-end gap-2 pt-1 border-t">
-                  <Link href={`/dashboard/products/${product.id}/edit`}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`ویرایش ${product.name}`}
+            paginatedProducts.map((product) => {
+              const relatedRecords =
+                (product._count?.stockIns ?? 0) +
+                (product._count?.stockOuts ?? 0);
+
+              return (
+                <div
+                  key={product.id}
+                  className="rounded-lg border p-4 space-y-3 transition-colors hover:bg-muted/40"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-semibold flex items-center gap-2">
+                      {product.name}
+                      {isLowStock(product) && (
+                        <AlertTriangle className="size-4 text-orange-600" />
+                      )}
+                    </div>
+                    <Badge
+                      variant={isLowStock(product) ? "destructive" : "default"}
                     >
-                      <Edit className="size-4" />
-                    </Button>
-                  </Link>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
+                      {Number(product.currentStock).toFixed(2)} {product.unit}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                    <span className="text-muted-foreground">کد محصول</span>
+                    <span>{product.sku || "-"}</span>
+                    <span className="text-muted-foreground">بارکد</span>
+                    <span dir="ltr" className="text-right">
+                      {product.barcode || "-"}
+                    </span>
+                    <span className="text-muted-foreground">دسته‌بندی</span>
+                    <span>
+                      {product.category ? (
+                        <Badge variant="secondary">{product.category}</Badge>
+                      ) : (
+                        "-"
+                      )}
+                    </span>
+                    <span className="text-muted-foreground">وضعیت</span>
+                    <span>
+                      <span
+                        className={
+                          isLowStock(product)
+                            ? "text-amber-700 dark:text-amber-300 font-medium"
+                            : "text-emerald-700 dark:text-emerald-300 font-medium"
+                        }
+                      >
+                        {isLowStock(product) ? "کم‌موجودی" : "عادی"}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-dashed">
+                    <Link href={`/dashboard/products/${product.id}/edit`}>
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label={`حذف ${product.name}`}
+                        aria-label={`ویرایش ${product.name}`}
                       >
-                        <Trash2 className="size-4 text-destructive" />
+                        <Edit className="size-4" />
                       </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>حذف محصول</AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-2">
-                          <span className="block">
-                            این عمل غیرقابل بازگشت است.
-                          </span>
-                          <span className="block">
-                            نام محصول: <strong>{product.name}</strong>
-                          </span>
-                          <span className="block">
-                            کد محصول: <strong>{product.sku || "-"}</strong>
-                          </span>
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>انصراف</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDelete(product.id)}
+                    </Link>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                          aria-label={`حذف ${product.name}`}
                         >
-                          حذف دائمی
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>حذف محصول</AlertDialogTitle>
+                          <AlertDialogDescription className="space-y-2">
+                            <span className="block">
+                              این عمل غیرقابل بازگشت است.
+                            </span>
+                            <span className="block">
+                              نام محصول: <strong>{product.name}</strong>
+                            </span>
+                            <span className="block">
+                              کد محصول: <strong>{product.sku || "-"}</strong>
+                            </span>
+                            {relatedRecords > 0 && (
+                              <span className="block text-amber-600 dark:text-amber-400">
+                                هشدار: این محصول {product._count?.stockIns ?? 0}{" "}
+                                ورود و {product._count?.stockOuts ?? 0} خروج
+                                ثبت‌شده دارد.
+                              </span>
+                            )}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>انصراف</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => handleDelete(product)}
+                          >
+                            حذف دائمی
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
 
-      {products.length > 0 && (
+      {localProducts.length > 0 && (
         <div className="flex items-center justify-end gap-2">
           <Button
             variant="outline"
@@ -490,7 +592,6 @@ export function ProductsTable({
   );
 }
 
-
 export function ProductsTableSkeleton() {
   return (
     <div className="space-y-4">
@@ -512,5 +613,5 @@ export function ProductsTableSkeleton() {
         </div>
       </Card>
     </div>
-  )
+  );
 }

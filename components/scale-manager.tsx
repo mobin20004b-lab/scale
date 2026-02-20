@@ -1,147 +1,233 @@
-"use client"
+"use client";
 
-import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
-import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Check, Copy, Edit, Eye, EyeOff, Plus, RefreshCw, Trash2 } from "lucide-react"
-import { DateTimeText } from "@/components/date-time-text"
+} from "@/components/ui/dialog";
+import {
+  Check,
+  Copy,
+  Edit,
+  Eye,
+  EyeOff,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { DateTimeText } from "@/components/date-time-text";
 
 interface Warehouse {
-  id: string
-  name: string
+  id: string;
+  name: string;
 }
 
 interface Scale {
-  id: string
-  name: string
-  apiKey: string
-  warehouseId: string
-  warehouse: Warehouse
-  lastWeight: number | null
-  lastWeightAt: string | Date | null
-  isActive: boolean
+  id: string;
+  name: string;
+  apiKey: string;
+  warehouseId: string;
+  warehouse: Warehouse;
+  lastWeight: number | null;
+  lastWeightAt: string | Date | null;
+  isActive: boolean;
+  _count?: {
+    stockIns: number;
+  };
 }
 
 interface ScaleManagerProps {
-  scales: Scale[]
-  warehouses: Warehouse[]
+  scales: Scale[];
+  warehouses: Warehouse[];
 }
 
 export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState<Scale | null>(null)
-  const [name, setName] = useState("")
-  const [warehouseId, setWarehouseId] = useState("")
-  const [isActive, setIsActive] = useState(true)
-  const [search, setSearch] = useState("")
-  const [warehouseFilter, setWarehouseFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [showTokens, setShowTokens] = useState<Record<string, boolean>>({})
-  const [copiedToken, setCopiedToken] = useState<string | null>(null)
-  const [liveWeights, setLiveWeights] = useState<Record<string, { lastWeight: number | null; lastWeightAt: string | Date | null }>>({})
-
-  const activeScales = useMemo(() => scales.filter((scale) => scale.isActive), [scales])
-
-  const visibleScales = useMemo(() => {
-    return scales.filter((scale) => {
-      const matchesSearch = scale.name.toLowerCase().includes(search.trim().toLowerCase())
-      const matchesWarehouse = warehouseFilter === "all" || scale.warehouseId === warehouseFilter
-      const matchesStatus =
-        statusFilter === "all" || (statusFilter === "active" ? scale.isActive : !scale.isActive)
-
-      return matchesSearch && matchesWarehouse && matchesStatus
-    })
-  }, [scales, search, warehouseFilter, statusFilter])
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Scale | null>(null);
+  const [name, setName] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
+  const [isActive, setIsActive] = useState(true);
+  const [search, setSearch] = useState("");
+  const [warehouseFilter, setWarehouseFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [liveWeights, setLiveWeights] = useState<
+    Record<
+      string,
+      { lastWeight: number | null; lastWeightAt: string | Date | null }
+    >
+  >({});
+  const [localScales, setLocalScales] = useState(scales);
+  const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  );
 
   useEffect(() => {
-    if (activeScales.length === 0) return
+    setLocalScales(scales);
+  }, [scales]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(pendingDeletes.current).forEach(clearTimeout);
+    };
+  }, []);
+
+  const activeScales = useMemo(
+    () => localScales.filter((scale) => scale.isActive),
+    [localScales],
+  );
+
+  const visibleScales = useMemo(() => {
+    return localScales.filter((scale) => {
+      const matchesSearch = scale.name
+        .toLowerCase()
+        .includes(search.trim().toLowerCase());
+      const matchesWarehouse =
+        warehouseFilter === "all" || scale.warehouseId === warehouseFilter;
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" ? scale.isActive : !scale.isActive);
+
+      return matchesSearch && matchesWarehouse && matchesStatus;
+    });
+  }, [localScales, search, warehouseFilter, statusFilter]);
+
+  useEffect(() => {
+    if (activeScales.length === 0) return;
 
     const fetchWeights = async () => {
       for (const scale of activeScales) {
-        const response = await fetch(`/api/scales/${scale.id}/weight`)
+        const response = await fetch(`/api/scales/${scale.id}/weight`);
         if (response.ok) {
-          const payload = await response.json()
+          const payload = await response.json();
           setLiveWeights((previous) => ({
             ...previous,
             [scale.id]: {
               lastWeight: payload.lastWeight,
               lastWeightAt: payload.lastWeightAt,
             },
-          }))
+          }));
         }
       }
-    }
+    };
 
-    fetchWeights()
-    const interval = setInterval(fetchWeights, 1000)
-    return () => clearInterval(interval)
-  }, [activeScales])
+    fetchWeights();
+    const interval = setInterval(fetchWeights, 1000);
+    return () => clearInterval(interval);
+  }, [activeScales]);
 
   const submitScale = async () => {
     try {
-      const response = await fetch(editing ? `/api/scales/${editing.id}` : "/api/scales", {
-        method: editing ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, warehouseId, isActive }),
-      })
+      const response = await fetch(
+        editing ? `/api/scales/${editing.id}` : "/api/scales",
+        {
+          method: editing ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, warehouseId, isActive }),
+        },
+      );
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}))
-        throw new Error(payload.error || "خطا در ذخیره ترازو")
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "خطا در ذخیره ترازو");
       }
 
-      toast.success(editing ? "ترازو ویرایش شد" : "ترازو ایجاد شد")
-      setOpen(false)
-      setEditing(null)
-      setName("")
-      setWarehouseId("")
-      setIsActive(true)
-      router.refresh()
+      toast.success(editing ? "ترازو ویرایش شد" : "ترازو ایجاد شد");
+      setOpen(false);
+      setEditing(null);
+      setName("");
+      setWarehouseId("");
+      setIsActive(true);
+      router.refresh();
     } catch (error: any) {
-      toast.error(error.message || "خطا در ذخیره ترازو")
+      toast.error(error.message || "خطا در ذخیره ترازو");
     }
-  }
+  };
 
-  const deleteScale = async (id: string) => {
-    const response = await fetch(`/api/scales/${id}`, { method: "DELETE" })
+  const executeDeleteScale = async (scale: Scale) => {
+    const response = await fetch(`/api/scales/${scale.id}`, {
+      method: "DELETE",
+    });
     if (response.ok) {
-      toast.success("ترازو حذف شد")
-      router.refresh()
+      toast.success("ترازو حذف شد");
+      router.refresh();
     } else {
-      toast.error("خطا در حذف ترازو")
+      setLocalScales((previous) => [scale, ...previous]);
+      toast.error("خطا در حذف ترازو");
     }
-  }
+  };
+
+  const deleteScale = (scale: Scale) => {
+    setLocalScales((previous) =>
+      previous.filter((item) => item.id !== scale.id),
+    );
+
+    pendingDeletes.current[scale.id] = setTimeout(() => {
+      delete pendingDeletes.current[scale.id];
+      executeDeleteScale(scale);
+    }, 5000);
+
+    toast("ترازو برای حذف علامت‌گذاری شد", {
+      description: "برای لغو حذف، تا ۵ ثانیه آینده بازگردانی را بزنید.",
+      action: {
+        label: "بازگردانی",
+        onClick: () => {
+          const timer = pendingDeletes.current[scale.id];
+          if (timer) {
+            clearTimeout(timer);
+            delete pendingDeletes.current[scale.id];
+            setLocalScales((previous) => [scale, ...previous]);
+            toast.success("حذف ترازو لغو شد");
+          }
+        },
+      },
+    });
+  };
 
   const copyScaleToken = async (apiKey: string) => {
     try {
-      await navigator.clipboard.writeText(apiKey)
-      setCopiedToken(apiKey)
-      toast.success("توکن ترازو کپی شد")
-      setTimeout(() => setCopiedToken((previous) => (previous === apiKey ? null : previous)), 1200)
+      await navigator.clipboard.writeText(apiKey);
+      setCopiedToken(apiKey);
+      toast.success("توکن ترازو کپی شد");
+      setTimeout(
+        () =>
+          setCopiedToken((previous) => (previous === apiKey ? null : previous)),
+        1200,
+      );
     } catch {
-      toast.error("کپی توکن ناموفق بود")
+      toast.error("کپی توکن ناموفق بود");
     }
-  }
+  };
 
   return (
     <Card>
@@ -150,12 +236,12 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
         <Dialog
           open={open}
           onOpenChange={(value) => {
-            setOpen(value)
+            setOpen(value);
             if (!value) {
-              setEditing(null)
-              setName("")
-              setWarehouseId("")
-              setIsActive(true)
+              setEditing(null);
+              setName("");
+              setWarehouseId("");
+              setIsActive(true);
             }
           }}
         >
@@ -167,7 +253,9 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editing ? "ویرایش ترازو" : "افزودن ترازو"}</DialogTitle>
+              <DialogTitle>
+                {editing ? "ویرایش ترازو" : "افزودن ترازو"}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-2">
@@ -182,14 +270,19 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                   </SelectTrigger>
                   <SelectContent>
                     {warehouses.map((warehouse) => (
-                      <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>وضعیت ترازو</Label>
-                <Select value={isActive ? "active" : "inactive"} onValueChange={(value) => setIsActive(value === "active")}>
+                <Select
+                  value={isActive ? "active" : "inactive"}
+                  onValueChange={(value) => setIsActive(value === "active")}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="وضعیت" />
                   </SelectTrigger>
@@ -199,14 +292,20 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={submitScale} className="w-full">ذخیره</Button>
+              <Button onClick={submitScale} className="w-full">
+                ذخیره
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid gap-2 md:grid-cols-3">
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="جستجو بر اساس نام ترازو" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="جستجو بر اساس نام ترازو"
+          />
           <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
             <SelectTrigger>
               <SelectValue placeholder="فیلتر انبار" />
@@ -214,7 +313,9 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
             <SelectContent>
               <SelectItem value="all">همه انبارها</SelectItem>
               {warehouses.map((warehouse) => (
-                <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>
+                <SelectItem key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -231,35 +332,42 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
         </div>
 
         <div className="text-xs text-muted-foreground">
-          نمایش {visibleScales.length} از {scales.length} ترازو
+          نمایش {visibleScales.length} از {localScales.length} ترازو
         </div>
 
         {visibleScales.map((scale) => {
-          const live = liveWeights[scale.id]
-          const lastWeight = live?.lastWeight ?? scale.lastWeight
-          const lastWeightAt = live?.lastWeightAt ?? scale.lastWeightAt
+          const live = liveWeights[scale.id];
+          const lastWeight = live?.lastWeight ?? scale.lastWeight;
+          const lastWeightAt = live?.lastWeightAt ?? scale.lastWeightAt;
 
           return (
             <div key={scale.id} className="rounded-lg border p-4 space-y-2">
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <div className="font-medium">{scale.name}</div>
-                  <div className="text-sm text-muted-foreground">انبار: {scale.warehouse.name}</div>
-                  <div className="text-xs text-muted-foreground font-mono break-all">
-                    توکن: {showTokens[scale.id] ? scale.apiKey : `••••••••${scale.apiKey.slice(-6)}`}
+                  <div className="text-sm text-muted-foreground">
+                    انبار: {scale.warehouse.name}
                   </div>
-                  <div className="text-xs text-muted-foreground">شناسه ترازو: {scale.id}</div>
+                  <div className="text-xs text-muted-foreground font-mono break-all">
+                    توکن:{" "}
+                    {showTokens[scale.id]
+                      ? scale.apiKey
+                      : `••••••••${scale.apiKey.slice(-6)}`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    شناسه ترازو: {scale.id}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1">
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => {
-                      setEditing(scale)
-                      setName(scale.name)
-                      setWarehouseId(scale.warehouseId)
-                      setIsActive(scale.isActive)
-                      setOpen(true)
+                      setEditing(scale);
+                      setName(scale.name);
+                      setWarehouseId(scale.warehouseId);
+                      setIsActive(scale.isActive);
+                      setOpen(true);
                     }}
                   >
                     <Edit className="size-4" />
@@ -267,37 +375,111 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => setShowTokens((previous) => ({ ...previous, [scale.id]: !previous[scale.id] }))}
+                    onClick={() =>
+                      setShowTokens((previous) => ({
+                        ...previous,
+                        [scale.id]: !previous[scale.id],
+                      }))
+                    }
                   >
-                    {showTokens[scale.id] ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => copyScaleToken(scale.apiKey)}>
-                    {copiedToken === scale.apiKey ? <Check className="size-4" /> : <Copy className="size-4" />}
+                    {showTokens[scale.id] ? (
+                      <EyeOff className="size-4" />
+                    ) : (
+                      <Eye className="size-4" />
+                    )}
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => navigator.clipboard.writeText(JSON.stringify({ scaleId: scale.id, token: scale.apiKey }, null, 2))}
+                    onClick={() => copyScaleToken(scale.apiKey)}
+                  >
+                    {copiedToken === scale.apiKey ? (
+                      <Check className="size-4" />
+                    ) : (
+                      <Copy className="size-4" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() =>
+                      navigator.clipboard.writeText(
+                        JSON.stringify(
+                          { scaleId: scale.id, token: scale.apiKey },
+                          null,
+                          2,
+                        ),
+                      )
+                    }
                   >
                     <RefreshCw className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => deleteScale(scale.id)}>
-                    <Trash2 className="size-4 text-destructive" />
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>حذف ترازو</AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-2">
+                          <span className="block">
+                            آیا از حذف «{scale.name}» مطمئن هستید؟
+                          </span>
+                          <span className="block">
+                            انبار: <strong>{scale.warehouse.name}</strong>
+                          </span>
+                          {(scale._count?.stockIns ?? 0) > 0 && (
+                            <span className="block text-amber-600 dark:text-amber-400">
+                              هشدار: این ترازو {scale._count?.stockIns ?? 0}{" "}
+                              تراکنش ورود وزن‌شده دارد.
+                            </span>
+                          )}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>انصراف</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={() => deleteScale(scale)}
+                        >
+                          حذف
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <Badge variant={scale.isActive ? "default" : "secondary"}>{scale.isActive ? "فعال" : "غیرفعال"}</Badge>
-                <Badge>{lastWeight !== null ? `${Number(lastWeight).toFixed(2)} گرم` : "بدون وزن"}</Badge>
+                <Badge variant={scale.isActive ? "default" : "secondary"}>
+                  {scale.isActive ? "فعال" : "غیرفعال"}
+                </Badge>
+                <Badge>
+                  {lastWeight !== null
+                    ? `${Number(lastWeight).toFixed(2)} گرم`
+                    : "بدون وزن"}
+                </Badge>
                 <span className="text-muted-foreground">
-                  {lastWeightAt ? <>آخرین دریافت: <DateTimeText value={lastWeightAt} showTimeZone /></> : "داده‌ای دریافت نشده"}
+                  {lastWeightAt ? (
+                    <>
+                      آخرین دریافت:{" "}
+                      <DateTimeText value={lastWeightAt} showTimeZone />
+                    </>
+                  ) : (
+                    "داده‌ای دریافت نشده"
+                  )}
                 </span>
               </div>
               <div className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground font-mono">
                 POST /api/external/stock-in + header: x-scale-token
               </div>
             </div>
-          )
+          );
         })}
 
         {visibleScales.length === 0 && (
@@ -307,5 +489,5 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
