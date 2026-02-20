@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { Code, Database, Key, Lock, Settings, Shield, UserCog, Users } from "lucide-react"
+import { Check, Code, Copy, Database, Key, Lock, Settings, Shield, UserCog, Users } from "lucide-react"
 
 type UserItem = {
   id: number
@@ -33,6 +33,87 @@ const apiEndpoints = [
   { method: "GET", path: "/api/external/inventory", description: "گزارش کامل موجودی انبار" }
 ]
 
+type ApiExample = {
+  id: string
+  job: string
+  title: string
+  endpoint: string
+  curlCommand: string
+  responseSnippet: string
+  description: string
+}
+
+const apiExamples: ApiExample[] = [
+  {
+    id: "inventory-sync",
+    job: "همگام‌سازی موجودی",
+    title: "دریافت گزارش کامل موجودی",
+    endpoint: "/api/external/inventory",
+    description: "برای همگام‌سازی اولیه یا بروزرسانی دوره‌ای موجودی در ERP/CRM استفاده کنید.",
+    curlCommand:
+      "curl -X GET 'https://your-domain.com/api/external/inventory' \\\n+  -H 'Authorization: Bearer YOUR_API_TOKEN'",
+    responseSnippet: `{
+  "summary": {
+    "totalProducts": 42,
+    "lowStockCount": 5,
+    "updatedAt": "2026-02-18T09:42:11.000Z"
+  },
+  "inventory": [
+    {
+      "id": 101,
+      "name": "برنج طارم",
+      "stock": 320,
+      "unit": "کیلوگرم"
+    }
+  ]
+}`
+  },
+  {
+    id: "stock-in",
+    job: "ثبت ورود کالا",
+    title: "افزایش موجودی پس از دریافت کالا",
+    endpoint: "/api/external/stock-in",
+    description: "بعد از تحویل از تامین‌کننده، مقدار ورودی را در انبار ثبت کنید.",
+    curlCommand:
+      "curl -X POST 'https://your-domain.com/api/external/stock-in' \\\n+  -H 'Authorization: Bearer YOUR_API_TOKEN' \\\n+  -H 'Content-Type: application/json' \\\n+  -d '{\"productId\":101,\"quantity\":25.5}'",
+    responseSnippet: `{
+  "message": "Stock in recorded successfully",
+  "product": {
+    "id": 101,
+    "name": "برنج طارم",
+    "stock": 345.5,
+    "unit": "کیلوگرم"
+  },
+  "transaction": {
+    "type": "IN",
+    "quantity": 25.5
+  }
+}`
+  },
+  {
+    id: "stock-out",
+    job: "ثبت خروج کالا",
+    title: "کاهش موجودی هنگام فروش/مصرف",
+    endpoint: "/api/external/stock-out",
+    description: "برای ثبت خروج کالا پس از فروش یا مصرف داخلی استفاده کنید.",
+    curlCommand:
+      "curl -X POST 'https://your-domain.com/api/external/stock-out' \\\n+  -H 'Authorization: Bearer YOUR_API_TOKEN' \\\n+  -H 'Content-Type: application/json' \\\n+  -d '{\"productId\":101,\"quantity\":10}'",
+    responseSnippet: `{
+  "message": "Stock out recorded successfully",
+  "product": {
+    "id": 101,
+    "name": "برنج طارم",
+    "stock": 335.5,
+    "unit": "کیلوگرم"
+  },
+  "transaction": {
+    "type": "OUT",
+    "quantity": 10
+  }
+}`
+  }
+]
+
 export default function SettingsPage() {
   const [users, setUsers] = useState(initialUsers)
   const [newUserName, setNewUserName] = useState("")
@@ -51,6 +132,7 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState("Asia/Tehran")
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [companyNote, setCompanyNote] = useState("ثبت دقیق ورودی/خروجی برای کنترل موجودی الزامی است.")
+  const [lastCopied, setLastCopied] = useState<string | null>(null)
 
   const activeUsers = useMemo(() => users.filter((user) => user.active).length, [users])
 
@@ -75,6 +157,12 @@ export default function SettingsPage() {
 
   const toggleUser = (id: number) => {
     setUsers((prev) => prev.map((user) => (user.id === id ? { ...user, active: !user.active } : user)))
+  }
+
+  const copyText = async (key: string, value: string) => {
+    await navigator.clipboard.writeText(value)
+    setLastCopied(key)
+    setTimeout(() => setLastCopied((current) => (current === key ? null : current)), 1800)
   }
 
   return (
@@ -324,18 +412,84 @@ export default function SettingsPage() {
               <CardDescription>مستندات در تب جداگانه قرار گرفت تا از تنظیمات عملیاتی جدا باشد</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="p-4 rounded-lg bg-muted">
+              <div className="p-4 rounded-lg bg-muted flex items-center justify-between gap-3">
                 <p className="text-sm font-mono" dir="ltr">Authorization: Bearer YOUR_API_TOKEN</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyText("auth-header", "Authorization: Bearer YOUR_API_TOKEN")}
+                >
+                  {lastCopied === "auth-header" ? <Check className="size-4" /> : <Copy className="size-4" />}
+                  کپی هدر
+                </Button>
               </div>
               {apiEndpoints.map((endpoint) => (
                 <div key={endpoint.path} className="rounded-lg border p-3 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={endpoint.method === "POST" ? "secondary" : "default"}>{endpoint.method}</Badge>
-                    <code dir="ltr" className="text-sm">{endpoint.path}</code>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={endpoint.method === "POST" ? "secondary" : "default"}>{endpoint.method}</Badge>
+                      <code dir="ltr" className="text-sm">{endpoint.path}</code>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyText(`endpoint-${endpoint.path}`, endpoint.path)}
+                    >
+                      {lastCopied === `endpoint-${endpoint.path}` ? <Check className="size-4" /> : <Copy className="size-4" />}
+                      کپی
+                    </Button>
                   </div>
                   <p className="text-sm text-muted-foreground">{endpoint.description}</p>
                 </div>
               ))}
+
+              <div className="space-y-4 pt-2">
+                <h4 className="font-medium">سناریوهای آماده اجرا (cURL + پاسخ JSON)</h4>
+                {apiExamples.map((example) => (
+                  <div key={example.id} className="rounded-lg border p-4 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge>{example.job}</Badge>
+                      <p className="text-sm font-medium">{example.title}</p>
+                      <code dir="ltr" className="text-xs text-muted-foreground">{example.endpoint}</code>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{example.description}</p>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs uppercase tracking-wider text-muted-foreground">cURL</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyText(`curl-${example.id}`, example.curlCommand)}
+                        >
+                          {lastCopied === `curl-${example.id}` ? <Check className="size-4" /> : <Copy className="size-4" />}
+                          کپی cURL
+                        </Button>
+                      </div>
+                      <pre dir="ltr" className="rounded-md bg-muted p-3 text-xs overflow-x-auto">
+                        <code>{example.curlCommand}</code>
+                      </pre>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs uppercase tracking-wider text-muted-foreground">JSON Response</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyText(`response-${example.id}`, example.responseSnippet)}
+                        >
+                          {lastCopied === `response-${example.id}` ? <Check className="size-4" /> : <Copy className="size-4" />}
+                          کپی JSON
+                        </Button>
+                      </div>
+                      <pre dir="ltr" className="rounded-md bg-muted p-3 text-xs overflow-x-auto">
+                        <code>{example.responseSnippet}</code>
+                      </pre>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
 
