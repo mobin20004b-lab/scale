@@ -47,6 +47,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DateTimeText } from "@/components/date-time-text";
 import { getScaleHealthSnapshot, ScaleHealth } from "@/lib/scale-health";
+import { formatScaleWeight } from "@/lib/scale-reading";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Empty,
@@ -68,8 +70,14 @@ interface Scale {
   apiKey: string;
   warehouseId: string;
   warehouse: Warehouse;
+  tare: number;
+  unit: string;
+  precision: number;
+  locationNote: string | null;
+  heartbeatIntervalSec: number;
   lastWeight: number | null;
   lastWeightAt: string | Date | null;
+  archivedAt?: string | Date | null;
   isActive: boolean;
   _count?: {
     stockIns: number;
@@ -88,6 +96,11 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const [name, setName] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [tare, setTare] = useState("0");
+  const [unit, setUnit] = useState("گرم");
+  const [precision, setPrecision] = useState("2");
+  const [locationNote, setLocationNote] = useState("");
+  const [heartbeatIntervalSec, setHeartbeatIntervalSec] = useState("1");
   const [search, setSearch] = useState("");
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -109,13 +122,20 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const [weightsError, setWeightsError] = useState<string | null>(null);
   const [weightsRefreshKey, setWeightsRefreshKey] = useState(0);
   const [localScales, setLocalScales] = useState(scales);
+  const [selectedScaleIds, setSelectedScaleIds] = useState<string[]>([]);
   const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
-    {},
+    {}
   );
 
   useEffect(() => {
     setLocalScales(scales);
   }, [scales]);
+
+  useEffect(() => {
+    setSelectedScaleIds((previous) =>
+      previous.filter((id) => localScales.some((scale) => scale.id === id))
+    );
+  }, [localScales]);
 
   useEffect(() => {
     return () => {
@@ -126,7 +146,8 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const visibleScales = useMemo(() => {
     return localScales.filter((scale) => {
       const live = liveWeights[scale.id];
-      const health = live?.health ?? getScaleHealthSnapshot(scale.lastWeightAt).health;
+      const health =
+        live?.health ?? getScaleHealthSnapshot(scale.lastWeightAt).health;
       const matchesSearch = scale.name
         .toLowerCase()
         .includes(search.trim().toLowerCase());
@@ -152,7 +173,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
 
   const visibleScaleIds = useMemo(
     () => visibleScales.map((scale) => scale.id),
-    [visibleScales],
+    [visibleScales]
   );
 
   useEffect(() => {
@@ -223,7 +244,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
         setWeightsError(
           hasError
             ? "بخشی از وزن‌های لحظه‌ای قابل دریافت نیست. اتصال شبکه یا وضعیت ترازوها را بررسی کنید."
-            : null,
+            : null
         );
         if (initialLoad) {
           setIsLoadingWeights(false);
@@ -269,8 +290,17 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
         {
           method: editing ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, warehouseId, isActive }),
-        },
+          body: JSON.stringify({
+            name,
+            warehouseId,
+            isActive,
+            tare: Number(tare),
+            unit,
+            precision: Number(precision),
+            locationNote,
+            heartbeatIntervalSec: Number(heartbeatIntervalSec),
+          }),
+        }
       );
 
       if (!response.ok) {
@@ -284,6 +314,11 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
       setName("");
       setWarehouseId("");
       setIsActive(true);
+      setTare("0");
+      setUnit("گرم");
+      setPrecision("2");
+      setLocationNote("");
+      setHeartbeatIntervalSec("1");
       router.refresh();
     } catch (error: any) {
       toast.error(error.message || "خطا در ذخیره ترازو");
@@ -295,17 +330,19 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
       method: "DELETE",
     });
     if (response.ok) {
-      toast.success("ترازو حذف شد");
+      const payload = await response.json().catch(() => ({}));
+      toast.success(payload.archived ? "ترازو آرشیو شد" : "ترازو حذف شد");
       router.refresh();
     } else {
       setLocalScales((previous) => [scale, ...previous]);
-      toast.error("خطا در حذف ترازو");
+      const payload = await response.json().catch(() => ({}));
+      toast.error(payload.error || "خطا در حذف ترازو");
     }
   };
 
   const deleteScale = (scale: Scale) => {
     setLocalScales((previous) =>
-      previous.filter((item) => item.id !== scale.id),
+      previous.filter((item) => item.id !== scale.id)
     );
 
     pendingDeletes.current[scale.id] = setTimeout(() => {
@@ -330,6 +367,56 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     });
   };
 
+  const toggleScaleSelection = (scaleId: string, checked: boolean) => {
+    setSelectedScaleIds((previous) =>
+      checked
+        ? [...new Set([...previous, scaleId])]
+        : previous.filter((id) => id !== scaleId)
+    );
+  };
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    if (checked) {
+      setSelectedScaleIds((previous) => [
+        ...new Set([...previous, ...visibleScales.map((scale) => scale.id)]),
+      ]);
+      return;
+    }
+
+    setSelectedScaleIds((previous) =>
+      previous.filter((id) => !visibleScales.some((scale) => scale.id === id))
+    );
+  };
+
+  const applyBulkAction = async ({
+    isActive,
+    warehouseId,
+  }: {
+    isActive?: boolean;
+    warehouseId?: string;
+  }) => {
+    if (selectedScaleIds.length === 0) {
+      toast.error("ابتدا چند ترازو را انتخاب کنید");
+      return;
+    }
+
+    const response = await fetch("/api/scales/bulk", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: selectedScaleIds, isActive, warehouseId }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      toast.error(payload.error || "اجرای عملیات گروهی ناموفق بود");
+      return;
+    }
+
+    toast.success("عملیات گروهی اجرا شد");
+    setSelectedScaleIds([]);
+    router.refresh();
+  };
+
   const copyScaleToken = async (apiKey: string) => {
     try {
       await navigator.clipboard.writeText(apiKey);
@@ -338,7 +425,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
       setTimeout(
         () =>
           setCopiedToken((previous) => (previous === apiKey ? null : previous)),
-        1200,
+        1200
       );
     } catch {
       toast.error("کپی توکن ناموفق بود");
@@ -358,6 +445,11 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
               setName("");
               setWarehouseId("");
               setIsActive(true);
+              setTare("0");
+              setUnit("گرم");
+              setPrecision("2");
+              setLocationNote("");
+              setHeartbeatIntervalSec("1");
             }
           }}
         >
@@ -407,6 +499,49 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                     <SelectItem value="inactive">غیرفعال</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>تار</Label>
+                  <Input
+                    value={tare}
+                    onChange={(e) => setTare(e.target.value)}
+                    type="number"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>واحد</Label>
+                  <Input
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>دقت نمایش</Label>
+                  <Input
+                    value={precision}
+                    onChange={(e) => setPrecision(e.target.value)}
+                    type="number"
+                    min={0}
+                    max={4}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>فاصله ضربان (ثانیه)</Label>
+                  <Input
+                    value={heartbeatIntervalSec}
+                    onChange={(e) => setHeartbeatIntervalSec(e.target.value)}
+                    type="number"
+                    min={1}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>توضیح محل نصب</Label>
+                <Input
+                  value={locationNote}
+                  onChange={(e) => setLocationNote(e.target.value)}
+                />
               </div>
               <Button onClick={submitScale} className="w-full">
                 ذخیره
@@ -461,14 +596,68 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
         <div className="text-xs text-muted-foreground">
           نمایش {visibleScales.length} از {localScales.length} ترازو
         </div>
+        <div className="flex flex-wrap items-center gap-2 rounded-md border p-2">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={
+                visibleScales.length > 0 &&
+                visibleScales.every((scale) =>
+                  selectedScaleIds.includes(scale.id)
+                )
+              }
+              onCheckedChange={(checked) =>
+                toggleSelectAllVisible(Boolean(checked))
+              }
+            />
+            <span className="text-sm">انتخاب همه موارد قابل مشاهده</span>
+          </div>
+          <Badge variant="secondary">
+            {selectedScaleIds.length} انتخاب شده
+          </Badge>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => applyBulkAction({ isActive: true })}
+          >
+            فعال‌سازی گروهی
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => applyBulkAction({ isActive: false })}
+          >
+            غیرفعال‌سازی گروهی
+          </Button>
+          <Select
+            onValueChange={(value) => applyBulkAction({ warehouseId: value })}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="انتقال گروهی به انبار" />
+            </SelectTrigger>
+            <SelectContent>
+              {warehouses.map((warehouse) => (
+                <SelectItem key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {visibleScales.map((scale) => {
           const live = liveWeights[scale.id];
           const lastWeight = live?.lastWeight ?? scale.lastWeight;
           const lastWeightAt = live?.lastWeightAt ?? scale.lastWeightAt;
-          const health = live?.health ?? getScaleHealthSnapshot(scale.lastWeightAt).health;
+          const health =
+            live?.health ?? getScaleHealthSnapshot(scale.lastWeightAt).health;
           const healthLabel =
-            health === "ONLINE" ? "آنلاین" : health === "STALE" ? "مردد" : "آفلاین";
+            health === "ONLINE"
+              ? "آنلاین"
+              : health === "STALE"
+                ? "مردد"
+                : "آفلاین";
           const healthVariant =
             health === "ONLINE"
               ? "default"
@@ -476,7 +665,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                 ? "secondary"
                 : "destructive";
           const fallbackAgeMs = getScaleHealthSnapshot(
-            scale.lastWeightAt,
+            scale.lastWeightAt
           ).lastReadingAgeMs;
           const ageMs = live?.lastReadingAgeMs ?? fallbackAgeMs;
           const healthAgeLabel =
@@ -488,20 +677,34 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
 
           return (
             <div key={scale.id} className="rounded-lg border p-4 space-y-2">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <div className="font-medium">{scale.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    انبار: {scale.warehouse.name}
-                  </div>
-                  <div className="text-xs text-muted-foreground font-mono break-all">
-                    توکن:{" "}
-                    {showTokens[scale.id]
-                      ? scale.apiKey
-                      : `••••••••${scale.apiKey.slice(-6)}`}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    شناسه ترازو: {scale.id}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    checked={selectedScaleIds.includes(scale.id)}
+                    onCheckedChange={(checked) =>
+                      toggleScaleSelection(scale.id, Boolean(checked))
+                    }
+                    className="mt-1"
+                  />
+                  <div className="space-y-1">
+                    <div className="font-medium">{scale.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      انبار: {scale.warehouse.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground font-mono break-all">
+                      توکن:{" "}
+                      {showTokens[scale.id]
+                        ? scale.apiKey
+                        : `••••••••${scale.apiKey.slice(-6)}`}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      شناسه ترازو: {scale.id}
+                    </div>
+                    {scale.locationNote && (
+                      <div className="text-xs text-muted-foreground">
+                        محل: {scale.locationNote}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
@@ -513,6 +716,13 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                       setName(scale.name);
                       setWarehouseId(scale.warehouseId);
                       setIsActive(scale.isActive);
+                      setTare(String(scale.tare ?? 0));
+                      setUnit(scale.unit || "گرم");
+                      setPrecision(String(scale.precision ?? 2));
+                      setLocationNote(scale.locationNote || "");
+                      setHeartbeatIntervalSec(
+                        String(scale.heartbeatIntervalSec ?? 1)
+                      );
                       setOpen(true);
                     }}
                   >
@@ -553,8 +763,8 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                         JSON.stringify(
                           { scaleId: scale.id, token: scale.apiKey },
                           null,
-                          2,
-                        ),
+                          2
+                        )
                       )
                     }
                   >
@@ -583,7 +793,8 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                           {(scale._count?.stockIns ?? 0) > 0 && (
                             <span className="block text-amber-600 dark:text-amber-400">
                               هشدار: این ترازو {scale._count?.stockIns ?? 0}{" "}
-                              تراکنش ورود وزن‌شده دارد.
+                              تراکنش ورود وزن‌شده دارد و به‌صورت آرشیو غیرفعال
+                              می‌شود.
                             </span>
                           )}
                         </AlertDialogDescription>
@@ -594,7 +805,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                           onClick={() => deleteScale(scale)}
                         >
-                          حذف
+                          {(scale._count?.stockIns ?? 0) > 0 ? "آرشیو" : "حذف"}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -605,18 +816,16 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                 <Badge variant={scale.isActive ? "default" : "secondary"}>
                   {scale.isActive ? "فعال" : "غیرفعال"}
                 </Badge>
+                {scale.archivedAt && <Badge variant="outline">آرشیو</Badge>}
                 <Badge variant={healthVariant}>{healthLabel}</Badge>
-                <Badge>
-                  {lastWeight !== null
-                    ? `${Number(lastWeight).toFixed(2)} گرم`
-                    : "بدون وزن"}
-                </Badge>
+                <Badge>{formatScaleWeight(lastWeight, scale)}</Badge>
                 <span className="text-muted-foreground">
                   سن آخرین قرائت: {healthAgeLabel}
                   {" · "}
                   {lastWeightAt ? (
                     <>
-                      آخرین دریافت: <DateTimeText value={lastWeightAt} showTimeZone />
+                      آخرین دریافت:{" "}
+                      <DateTimeText value={lastWeightAt} showTimeZone />
                     </>
                   ) : (
                     "داده‌ای دریافت نشده"
@@ -640,10 +849,15 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
         {weightsError && (
           <Empty className="border border-amber-500/40 bg-amber-500/5 p-4 md:p-5">
             <EmptyHeader className="max-w-full">
-              <EmptyMedia variant="icon" className="bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <EmptyMedia
+                variant="icon"
+                className="bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              >
                 <AlertCircle className="size-5" />
               </EmptyMedia>
-              <EmptyTitle className="text-base">دریافت وزن لحظه‌ای با خطا مواجه شد</EmptyTitle>
+              <EmptyTitle className="text-base">
+                دریافت وزن لحظه‌ای با خطا مواجه شد
+              </EmptyTitle>
               <EmptyDescription>{weightsError}</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
