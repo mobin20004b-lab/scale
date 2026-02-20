@@ -29,38 +29,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
     }
 
-    const stockIn = await prisma.stockIn.create({
-      data: {
-        productId,
-        userId: (session.user as any).id,
-        quantity: parsedQuantity,
-        weight: parsedQuantity,
-        supplier: supplier || null,
-        invoiceNumber: invoiceNumber || null,
-        notes: notes || null,
-        warehouseId: warehouseId || null,
-        scaleId: scaleId || null,
-        scaleWeight: scaleWeight !== undefined && scaleWeight !== null ? Number(scaleWeight) : null,
-      }
-    })
-
-    await prisma.product.update({
-      where: { id: productId },
-      data: {
-        currentStock: {
-          increment: parsedQuantity
+    const stockIn = await prisma.$transaction(async (tx) => {
+      const createdStockIn = await tx.stockIn.create({
+        data: {
+          productId,
+          userId: (session.user as any).id,
+          quantity: parsedQuantity,
+          weight: parsedQuantity,
+          supplier: supplier || null,
+          invoiceNumber: invoiceNumber || null,
+          notes: notes || null,
+          warehouseId: warehouseId || null,
+          scaleId: scaleId || null,
+          scaleWeight: scaleWeight !== undefined && scaleWeight !== null ? Number(scaleWeight) : null,
         }
-      }
-    })
+      })
 
-    await prisma.activity.create({
-      data: {
-        userId: (session.user as any).id,
-        action: "ورود کالا",
-        entity: "StockIn",
-        entityId: stockIn.id,
-        details: `${parsedQuantity} ${product.unit} از "${product.name}" به انبار اضافه شد`
-      }
+      await tx.product.update({
+        where: { id: productId },
+        data: {
+          currentStock: {
+            increment: parsedQuantity
+          }
+        }
+      })
+
+      await tx.activity.create({
+        data: {
+          userId: (session.user as any).id,
+          action: "ورود کالا",
+          entity: "StockIn",
+          entityId: createdStockIn.id,
+          details: `${parsedQuantity} ${product.unit} از "${product.name}" به انبار اضافه شد`
+        }
+      })
+
+      return createdStockIn
     })
 
     return NextResponse.json(stockIn, { status: 201 })

@@ -43,35 +43,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "System user not found" }, { status: 500 })
     }
 
-    // Create stock in record
-    const stockIn = await prisma.stockIn.create({
-      data: {
-        productId,
-        userId: systemUser.id,
-        quantity: parseFloat(quantity),
-        supplier: supplier || null,
-        invoiceNumber: invoiceNumber || null,
-        notes: notes || null
-      }
-    })
+    const parsedQuantity = parseFloat(String(quantity))
 
-    await prisma.product.update({
-      where: { id: productId },
-      data: {
-        currentStock: {
-          increment: parseFloat(quantity)
+    // Create stock in record + update product + activity log atomically
+    const stockIn = await prisma.$transaction(async (tx) => {
+      const createdStockIn = await tx.stockIn.create({
+        data: {
+          productId,
+          userId: systemUser.id,
+          quantity: parsedQuantity,
+          supplier: supplier || null,
+          invoiceNumber: invoiceNumber || null,
+          notes: notes || null
         }
-      }
-    })
+      })
 
-    await prisma.activity.create({
-      data: {
-        userId: systemUser.id,
-        action: "ورود کالا (API)",
-        entity: "StockIn",
-        entityId: stockIn.id,
-        details: `${parseFloat(quantity)} ${product.unit} از "${product.name}" از طریق API اضافه شد`
-      }
+      await tx.product.update({
+        where: { id: productId },
+        data: {
+          currentStock: {
+            increment: parsedQuantity
+          }
+        }
+      })
+
+      await tx.activity.create({
+        data: {
+          userId: systemUser.id,
+          action: "ورود کالا (API)",
+          entity: "StockIn",
+          entityId: createdStockIn.id,
+          details: `${parsedQuantity} ${product.unit} از "${product.name}" از طریق API اضافه شد`
+        }
+      })
+
+      return createdStockIn
     })
 
     return NextResponse.json({
