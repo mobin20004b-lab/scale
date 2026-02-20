@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Package, Weight, TrendingUp, TrendingDown } from "lucide-react"
 
 interface DashboardStatsProps {
@@ -59,6 +60,24 @@ export function DashboardStats({
           </Card>
         )
       })}
+    </div>
+  )
+}
+
+export function DashboardStatsSkeleton() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Card key={i}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="size-5 rounded-md" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-9 w-24" />
+          </CardContent>
+        </Card>
+      ))}
     </div>
   )
 }

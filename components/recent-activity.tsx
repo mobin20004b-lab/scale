@@ -1,8 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Clock } from "lucide-react"
+import { Clock, History } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { faIR } from "date-fns/locale"
 
 interface Activity {
@@ -39,9 +41,16 @@ export function RecentActivity({ activities }: RecentActivityProps) {
         <ScrollArea className="h-[400px] pr-4">
           <div className="space-y-4">
             {activities.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                هیچ فعالیتی ثبت نشده است
-              </p>
+              <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-6 text-center">
+                <History className="size-10 text-muted-foreground" />
+                <p className="font-medium">فعلاً فعالیتی ثبت نشده است</p>
+                <p className="text-sm text-muted-foreground">
+                  بعد از ثبت اولین عملیات ورود یا خروج کالا، سوابق این بخش تکمیل می‌شود.
+                </p>
+                <Link href="/dashboard/stock-in">
+                  <Button>ثبت اولین فعالیت</Button>
+                </Link>
+              </div>
             ) : (
               activities.map((activity) => (
                 <div

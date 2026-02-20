@@ -1,3 +1,4 @@
+import { ProductsTableSkeleton } from "@/components/products-table"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export default function ProductsLoading() {
@@ -10,8 +11,7 @@ export default function ProductsLoading() {
         </div>
         <Skeleton className="h-10 w-32" />
       </div>
-      <Skeleton className="h-14 w-full" />
-      <Skeleton className="h-[460px] w-full" />
+      <ProductsTableSkeleton />
     </div>
   )
 }
