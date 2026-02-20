@@ -1,8 +1,17 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { LogOut, Bell } from "lucide-react"
+import { LogOut, Bell, Menu } from "lucide-react"
 import { signOut } from "next-auth/react"
+import { ModeToggle } from "@/components/mode-toggle"
+import { Breadcrumbs } from "./breadcrumbs"
+import { SidebarContent } from "./dashboard-sidebar"
+import { usePathname } from "next/navigation"
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +27,7 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ user }: DashboardHeaderProps) {
+  const pathname = usePathname()
   const handleSignOut = async () => {
     await signOut({ callbackUrl: "/login" })
   }
@@ -25,19 +35,36 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
   return (
     <header className="flex items-center justify-between h-16 px-6 border-b bg-card">
       <div className="flex items-center gap-4">
-        <h1 className="text-xl font-semibold">
-          خوش آمدید، {user?.name}
-        </h1>
-        <Badge variant="secondary" className="text-xs">
-          {new Date().toLocaleDateString('fa-IR', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          })}
-        </Badge>
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="lg:hidden">
+              <Menu className="size-5" />
+              <span className="sr-only">باز کردن منو</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="p-0 w-64">
+            <SidebarContent user={user} pathname={pathname} />
+          </SheetContent>
+        </Sheet>
+        <div className="flex flex-col">
+          <h1 className="text-lg font-semibold leading-none">
+            خوش آمدید، {user?.name}
+          </h1>
+          <div className="flex items-center gap-2 mt-1">
+            <Badge variant="secondary" className="text-[10px] px-1 h-4">
+              {new Date().toLocaleDateString('fa-IR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              })}
+            </Badge>
+            <Breadcrumbs />
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
+        <ModeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative">

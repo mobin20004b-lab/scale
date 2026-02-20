@@ -56,11 +56,9 @@ interface DashboardSidebarProps {
   user: any
 }
 
-export function DashboardSidebar({ user }: DashboardSidebarProps) {
-  const pathname = usePathname()
-
+export function SidebarContent({ user, pathname }: { user: any, pathname: string }) {
   return (
-    <aside className="flex flex-col w-64 border-l bg-card">
+    <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 p-6 border-b">
         <div className="flex items-center justify-center size-10 rounded-lg bg-primary text-primary-foreground">
           <Warehouse className="size-5" />
@@ -108,6 +106,16 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+export function DashboardSidebar({ user }: DashboardSidebarProps) {
+  const pathname = usePathname()
+
+  return (
+    <aside className="hidden lg:flex flex-col w-64 border-l bg-card h-full">
+      <SidebarContent user={user} pathname={pathname} />
     </aside>
   )
 }

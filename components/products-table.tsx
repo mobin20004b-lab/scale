@@ -20,9 +20,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Edit, Trash2, Search, AlertTriangle } from "lucide-react"
+import { Edit, Trash2, Search, AlertTriangle, X, PackageOpen } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -94,14 +102,32 @@ export function ProductsTable({
   return (
     <div className="space-y-4">
       <div className="flex gap-3">
-        <div className="flex-1 flex gap-2">
-          <Input
-            placeholder="جستجو بر اساس نام، کد یا بارکد..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            dir="rtl"
-          />
+        <div className="flex-1 flex gap-2 relative">
+          <div className="relative flex-1">
+            <Input
+              placeholder="جستجو بر اساس نام، کد یا بارکد..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              dir="rtl"
+              className="pl-10"
+            />
+            {search && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute left-0 top-0 h-full px-3 hover:bg-transparent text-muted-foreground"
+                onClick={() => {
+                  setSearch("")
+                  const params = new URLSearchParams()
+                  if (category && category !== 'all') params.set('category', category)
+                  router.push(`/dashboard/products?${params.toString()}`)
+                }}
+              >
+                <X className="size-4" />
+              </Button>
+            )}
+          </div>
           <Button onClick={handleSearch} variant="secondary">
             <Search className="size-4" />
           </Button>
@@ -150,8 +176,27 @@ export function ProductsTable({
           <TableBody>
             {products.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                  محصولی یافت نشد
+                <TableCell colSpan={8} className="h-96">
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <PackageOpen className="size-6" />
+                      </EmptyMedia>
+                      <EmptyTitle>محصولی یافت نشد</EmptyTitle>
+                      <EmptyDescription>
+                        {search || (category && category !== "all")
+                          ? "هیچ محصولی با فیلترهای انتخاب شده مطابقت ندارد."
+                          : "هنوز هیچ محصولی در سیستم ثبت نشده است."}
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    {!search && category === "all" && (
+                      <EmptyContent>
+                        <Link href="/dashboard/products/new">
+                          <Button variant="outline">ثبت اولین محصول</Button>
+                        </Link>
+                      </EmptyContent>
+                    )}
+                  </Empty>
                 </TableCell>
               </TableRow>
             ) : (

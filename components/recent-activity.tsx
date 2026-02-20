@@ -1,9 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Clock } from "lucide-react"
+import { Clock, History } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { faIR } from "date-fns/locale"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 
 interface Activity {
   id: string
@@ -39,9 +46,17 @@ export function RecentActivity({ activities }: RecentActivityProps) {
         <ScrollArea className="h-[400px] pr-4">
           <div className="space-y-4">
             {activities.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                هیچ فعالیتی ثبت نشده است
-              </p>
+              <Empty className="border-0 p-0 md:p-0">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <History className="size-6" />
+                  </EmptyMedia>
+                  <EmptyTitle>فعالیتی یافت نشد</EmptyTitle>
+                  <EmptyDescription>
+                    هنوز هیچ فعالیتی در سیستم ثبت نشده است.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
               activities.map((activity) => (
                 <div
