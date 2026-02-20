@@ -1,0 +1,86 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
+import { History } from "lucide-react"
+import { format } from "date-fns"
+import { faIR } from "date-fns/locale"
+
+interface StockOut {
+  id: number
+  quantity: number
+  recipient: string | null
+  reference_number: string | null
+  created_at: Date
+  product: {
+    name: string
+    unit: string
+  }
+  user: {
+    full_name: string
+  }
+}
+
+interface StockOutListProps {
+  stockOuts: StockOut[]
+}
+
+export function StockOutList({ stockOuts }: StockOutListProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <History className="size-5" />
+          خروجی‌های اخیر
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="h-[600px] pr-4">
+          <div className="space-y-3">
+            {stockOuts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                هیچ خروجی ثبت نشده است
+              </p>
+            ) : (
+              stockOuts.map((stockOut) => (
+                <div
+                  key={stockOut.id}
+                  className="p-4 rounded-lg border bg-card space-y-2"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="font-medium">{stockOut.product.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="secondary">
+                          -{Number(stockOut.quantity).toFixed(2)} {stockOut.product.unit}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {stockOut.recipient && (
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium">گیرنده:</span> {stockOut.recipient}
+                    </p>
+                  )}
+                  
+                  {stockOut.reference_number && (
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium">شماره مرجع:</span> {stockOut.reference_number}
+                    </p>
+                  )}
+                  
+                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                    <span>{stockOut.user.full_name}</span>
+                    <span>
+                      {format(new Date(stockOut.created_at), 'yyyy/MM/dd HH:mm', { locale: faIR })}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  )
+}

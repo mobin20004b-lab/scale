@@ -1,0 +1,212 @@
+"use client"
+
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { toast } from "sonner"
+import { Loader2 } from "lucide-react"
+
+const productSchema = z.object({
+  name: z.string().min(1, "نام محصول الزامی است"),
+  sku: z.string().optional(),
+  barcode: z.string().optional(),
+  category: z.string().optional(),
+  unit: z.string().min(1, "واحد اندازه‌گیری الزامی است"),
+  alert_threshold: z.string().min(0, "حداقل موجودی باید مثبت باشد"),
+  location: z.string().optional(),
+  description: z.string().optional(),
+})
+
+type ProductFormData = z.infer<typeof productSchema>
+
+interface ProductFormProps {
+  product?: any
+}
+
+export function ProductForm({ product }: ProductFormProps) {
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ProductFormData>({
+    resolver: zodResolver(productSchema),
+    defaultValues: product ? {
+      name: product.name,
+      sku: product.sku || "",
+      barcode: product.barcode || "",
+      category: product.category || "",
+      unit: product.unit,
+      alert_threshold: product.alert_threshold.toString(),
+      location: product.location || "",
+      description: product.description || "",
+    } : {
+      unit: "کیلوگرم"
+    }
+  })
+
+  const onSubmit = async (data: ProductFormData) => {
+    setIsLoading(true)
+
+    try {
+      const url = product 
+        ? `/api/products/${product.id}`
+        : '/api/products'
+      
+      const method = product ? 'PUT' : 'POST'
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          alert_threshold: parseFloat(data.alert_threshold)
+        })
+      })
+
+      if (response.ok) {
+        toast.success(product ? "محصول با موفقیت ویرایش شد" : "محصول با موفقیت اضافه شد")
+        router.push('/dashboard/products')
+        router.refresh()
+      } else {
+        const error = await response.json()
+        toast.error(error.error || "خطا در ذخیره محصول")
+      }
+    } catch (error) {
+      toast.error("خطا در ذخیره محصول")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>اطلاعات محصول</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="name">نام محصول *</Label>
+              <Input
+                id="name"
+                {...register("name")}
+                disabled={isLoading}
+                dir="rtl"
+              />
+              {errors.name && (
+                <p className="text-sm text-destructive">{errors.name.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="sku">کد محصول (SKU)</Label>
+              <Input
+                id="sku"
+                {...register("sku")}
+                disabled={isLoading}
+                dir="ltr"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="barcode">بارکد</Label>
+              <Input
+                id="barcode"
+                {...register("barcode")}
+                disabled={isLoading}
+                dir="ltr"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="category">دسته‌بندی</Label>
+              <Input
+                id="category"
+                {...register("category")}
+                disabled={isLoading}
+                dir="rtl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="unit">واحد اندازه‌گیری *</Label>
+              <Input
+                id="unit"
+                {...register("unit")}
+                disabled={isLoading}
+                dir="rtl"
+                placeholder="کیلوگرم، گرم، لیتر، ..."
+              />
+              {errors.unit && (
+                <p className="text-sm text-destructive">{errors.unit.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="alert_threshold">حداقل موجودی (آستانه هشدار) *</Label>
+              <Input
+                id="alert_threshold"
+                type="number"
+                step="0.01"
+                {...register("alert_threshold")}
+                disabled={isLoading}
+                dir="ltr"
+              />
+              {errors.alert_threshold && (
+                <p className="text-sm text-destructive">{errors.alert_threshold.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="location">موقعیت انبار</Label>
+              <Input
+                id="location"
+                {...register("location")}
+                disabled={isLoading}
+                dir="rtl"
+                placeholder="قفسه A، انبار 1، ..."
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">توضیحات</Label>
+            <textarea
+              id="description"
+              {...register("description")}
+              disabled={isLoading}
+              dir="rtl"
+              className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="توضیحات تکمیلی درباره محصول..."
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <Button type="submit" disabled={isLoading}>
+              {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
+              {product ? "ذخیره تغییرات" : "ثبت محصول"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push('/dashboard/products')}
+              disabled={isLoading}
+            >
+              انصراف
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}

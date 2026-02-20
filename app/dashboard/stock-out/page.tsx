@@ -1,0 +1,44 @@
+import { StockOutForm } from "@/components/stock-out-form"
+import { StockOutList } from "@/components/stock-out-list"
+import { prisma } from "@/lib/prisma"
+
+export default async function StockOutPage() {
+  const [products, recentStockOuts] = await Promise.all([
+    prisma.product.findMany({
+      where: {
+        current_quantity: {
+          gt: 0
+        }
+      },
+      orderBy: { name: 'asc' }
+    }),
+    prisma.stockOut.findMany({
+      take: 10,
+      orderBy: { created_at: 'desc' },
+      include: {
+        product: true,
+        user: {
+          select: {
+            full_name: true
+          }
+        }
+      }
+    })
+  ])
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-3xl font-bold tracking-tight">خروج کالا</h2>
+        <p className="text-muted-foreground">
+          ثبت خروج کالا از انبار
+        </p>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <StockOutForm products={products} />
+        <StockOutList stockOuts={recentStockOuts} />
+      </div>
+    </div>
+  )
+}

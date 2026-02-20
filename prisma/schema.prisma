@@ -1,0 +1,126 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String
+  role          UserRole  @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  stockIns      StockIn[]
+  stockOuts     StockOut[]
+  activities    Activity[]
+  
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  VIEWER
+}
+
+// Product model
+model Product {
+  id            String    @id @default(cuid())
+  name          String
+  nameAr        String?   // Arabic name
+  sku           String    @unique
+  barcode       String?   @unique
+  qrCode        String?   @unique
+  description   String?
+  descriptionAr String?   // Arabic description
+  category      String
+  weightPerUnit Float     // Weight in grams
+  minStock      Float     @default(0)
+  maxStock      Float?
+  currentStock  Float     @default(0)
+  unit          String    @default("قطعة") // Default unit in Arabic
+  imageUrl      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  stockIns      StockIn[]
+  stockOuts     StockOut[]
+  
+  @@map("products")
+}
+
+// Stock In model
+model StockIn {
+  id            String    @id @default(cuid())
+  productId     String
+  userId        String
+  quantity      Float     // Number of units
+  weight        Float     // Total weight in grams
+  supplier      String?
+  invoiceNumber String?
+  notes         String?
+  date          DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id])
+  
+  @@map("stock_ins")
+  @@index([productId])
+  @@index([userId])
+  @@index([date])
+}
+
+// Stock Out model
+model StockOut {
+  id            String    @id @default(cuid())
+  productId     String
+  userId        String
+  quantity      Float     // Number of units
+  weight        Float     // Total weight in grams
+  customer      String?
+  invoiceNumber String?
+  notes         String?
+  date          DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id])
+  
+  @@map("stock_outs")
+  @@index([productId])
+  @@index([userId])
+  @@index([date])
+}
+
+// Activity Log model
+model Activity {
+  id            String    @id @default(cuid())
+  userId        String
+  action        String
+  entity        String    // Product, StockIn, StockOut
+  entityId      String
+  details       String?
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  user          User      @relation(fields: [userId], references: [id])
+  
+  @@map("activities")
+  @@index([userId])
+  @@index([createdAt])
+}

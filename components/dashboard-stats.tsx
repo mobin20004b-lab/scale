@@ -1,0 +1,64 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Package, Weight, TrendingUp, TrendingDown } from "lucide-react"
+
+interface DashboardStatsProps {
+  totalProducts: number
+  totalWeight: number
+  totalStockIns: number
+  totalStockOuts: number
+}
+
+export function DashboardStats({
+  totalProducts,
+  totalWeight,
+  totalStockIns,
+  totalStockOuts
+}: DashboardStatsProps) {
+  const stats = [
+    {
+      title: "کل محصولات",
+      value: totalProducts,
+      icon: Package,
+      color: "text-blue-600"
+    },
+    {
+      title: "وزن کل (کیلوگرم)",
+      value: totalWeight.toFixed(2),
+      icon: Weight,
+      color: "text-purple-600"
+    },
+    {
+      title: "ورودی‌ها",
+      value: totalStockIns,
+      icon: TrendingUp,
+      color: "text-green-600"
+    },
+    {
+      title: "خروجی‌ها",
+      value: totalStockOuts,
+      icon: TrendingDown,
+      color: "text-orange-600"
+    }
+  ]
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {stats.map((stat) => {
+        const Icon = stat.icon
+        return (
+          <Card key={stat.title}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                {stat.title}
+              </CardTitle>
+              <Icon className={`size-5 ${stat.color}`} />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{stat.value}</div>
+            </CardContent>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
