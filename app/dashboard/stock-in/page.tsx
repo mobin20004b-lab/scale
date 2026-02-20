@@ -3,7 +3,7 @@ import { StockInList } from "@/components/stock-in-list"
 import { prisma } from "@/lib/prisma"
 
 export default async function StockInPage() {
-  const [products, recentStockIns] = await Promise.all([
+  const [products, recentStockIns, warehouses, scales] = await Promise.all([
     prisma.product.findMany({
       orderBy: { name: 'asc' }
     }),
@@ -12,13 +12,27 @@ export default async function StockInPage() {
       orderBy: { createdAt: 'desc' },
       include: {
         product: true,
+        warehouse: {
+          select: {
+            name: true,
+          },
+        },
         user: {
           select: {
             full_name: true
           }
         }
       }
-    })
+    }),
+    prisma.warehouse.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.scale.findMany({
+      select: { id: true, name: true, warehouseId: true },
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+    }),
   ])
 
   return (
@@ -31,7 +45,7 @@ export default async function StockInPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <StockInForm products={products} />
+        <StockInForm products={products} warehouses={warehouses} scales={scales} />
         <StockInList stockIns={recentStockIns} />
       </div>
     </div>

@@ -11,7 +11,8 @@ import {
   PackageMinus,
   BarChart3,
   Settings,
-  History
+  History,
+  Weight
 } from "lucide-react"
 
 const navItems = [
@@ -39,6 +40,16 @@ const navItems = [
     title: "گزارش‌ها",
     href: "/dashboard/reports",
     icon: BarChart3
+  },
+  {
+    title: "انبارها",
+    href: "/dashboard/warehouses",
+    icon: Warehouse
+  },
+  {
+    title: "ترازوها",
+    href: "/dashboard/scales",
+    icon: Weight
   },
   {
     title: "سوابق",

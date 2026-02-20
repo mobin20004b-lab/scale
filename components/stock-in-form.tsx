@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -22,7 +22,7 @@ import { BarcodeScanner } from "./barcode-scanner"
 
 const stockInSchema = z.object({
   productId: z.string().min(1, "محصول را انتخاب کنید"),
-  quantity: z.string().min(0.01, "مقدار باید بیشتر از صفر باشد"),
+  quantity: z.string().min(1, "مقدار باید بیشتر از صفر باشد"),
   supplier: z.string().optional(),
   invoiceNumber: z.string().optional(),
   notes: z.string().optional(),
@@ -37,15 +37,31 @@ interface Product {
   unit: string
 }
 
-interface StockInFormProps {
-  products: Product[]
+interface Warehouse {
+  id: string
+  name: string
 }
 
-export function StockInForm({ products }: StockInFormProps) {
+interface Scale {
+  id: string
+  name: string
+  warehouseId: string
+}
+
+interface StockInFormProps {
+  products: Product[]
+  warehouses: Warehouse[]
+  scales: Scale[]
+}
+
+export function StockInForm({ products, warehouses, scales }: StockInFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("")
+  const [selectedScaleId, setSelectedScaleId] = useState<string>("")
+  const [liveWeight, setLiveWeight] = useState<number | null>(null)
 
   const {
     register,
@@ -57,8 +73,32 @@ export function StockInForm({ products }: StockInFormProps) {
     resolver: zodResolver(stockInSchema),
   })
 
+  const filteredScales = useMemo(
+    () => scales.filter((scale) => scale.warehouseId === selectedWarehouseId),
+    [scales, selectedWarehouseId]
+  )
+
+  useEffect(() => {
+    if (!selectedScaleId) {
+      setLiveWeight(null)
+      return
+    }
+
+    const fetchWeight = async () => {
+      const response = await fetch(`/api/scales/${selectedScaleId}/weight`)
+      if (response.ok) {
+        const payload = await response.json()
+        setLiveWeight(payload.lastWeight ?? null)
+      }
+    }
+
+    fetchWeight()
+    const interval = setInterval(fetchWeight, 1000)
+    return () => clearInterval(interval)
+  }, [selectedScaleId])
+
   const handleBarcodeScanned = (barcode: string) => {
-    const product = products.find(p => p.barcode === barcode)
+    const product = products.find((p) => p.barcode === barcode)
     if (product) {
       setValue("productId", product.id.toString())
       setSelectedProduct(product)
@@ -79,7 +119,10 @@ export function StockInForm({ products }: StockInFormProps) {
         body: JSON.stringify({
           ...data,
           productId: data.productId,
-          quantity: parseFloat(data.quantity)
+          quantity: parseFloat(data.quantity),
+          warehouseId: selectedWarehouseId || null,
+          scaleId: selectedScaleId || null,
+          scaleWeight: liveWeight,
         })
       })
 
@@ -87,12 +130,15 @@ export function StockInForm({ products }: StockInFormProps) {
         toast.success("ورود کالا با موفقیت ثبت شد")
         reset()
         setSelectedProduct(null)
+        setSelectedWarehouseId("")
+        setSelectedScaleId("")
+        setLiveWeight(null)
         router.refresh()
       } else {
         const error = await response.json()
         toast.error(error.error || "خطا در ثبت ورود کالا")
       }
-    } catch (error) {
+    } catch {
       toast.error("خطا در ثبت ورود کالا")
     } finally {
       setIsLoading(false)
@@ -110,12 +156,70 @@ export function StockInForm({ products }: StockInFormProps) {
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
+            <Label>انبار</Label>
+            <Select
+              value={selectedWarehouseId}
+              onValueChange={(value) => {
+                setSelectedWarehouseId(value)
+                setSelectedScaleId("")
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="انتخاب انبار" />
+              </SelectTrigger>
+              <SelectContent>
+                {warehouses.map((warehouse) => (
+                  <SelectItem key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>ترازو</Label>
+            <Select value={selectedScaleId} onValueChange={setSelectedScaleId} disabled={!selectedWarehouseId}>
+              <SelectTrigger>
+                <SelectValue placeholder="انتخاب ترازو" />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredScales.map((scale) => (
+                  <SelectItem key={scale.id} value={scale.id}>
+                    {scale.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedScaleId && (
+            <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-between">
+              <div className="text-sm font-medium">
+                وزن زنده: {liveWeight !== null ? `${Number(liveWeight).toFixed(2)} گرم` : "--"}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  if (liveWeight !== null) {
+                    setValue("quantity", String(liveWeight))
+                  }
+                }}
+              >
+                استفاده از وزن ترازو
+              </Button>
+            </div>
+          )}
+
+          <div className="space-y-2">
             <Label>محصول *</Label>
             <div className="flex gap-2">
               <Select
                 onValueChange={(value) => {
                   setValue("productId", value)
-                  const product = products.find(p => p.id.toString() === value)
+                  const product = products.find((p) => p.id.toString() === value)
                   setSelectedProduct(product || null)
                 }}
                 value={selectedProduct?.id.toString()}
@@ -145,9 +249,7 @@ export function StockInForm({ products }: StockInFormProps) {
             )}
           </div>
 
-          {showScanner && (
-            <BarcodeScanner onScan={handleBarcodeScanned} />
-          )}
+          {showScanner && <BarcodeScanner onScan={handleBarcodeScanned} />}
 
           {selectedProduct && (
             <div className="p-3 rounded-lg bg-muted">
@@ -175,24 +277,12 @@ export function StockInForm({ products }: StockInFormProps) {
 
           <div className="space-y-2">
             <Label htmlFor="supplier">تامین‌کننده</Label>
-            <Input
-              id="supplier"
-              {...register("supplier")}
-              disabled={isLoading}
-              dir="rtl"
-              placeholder="نام تامین‌کننده"
-            />
+            <Input id="supplier" {...register("supplier")} disabled={isLoading} dir="rtl" placeholder="نام تامین‌کننده" />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="invoiceNumber">شماره فاکتور</Label>
-            <Input
-              id="invoiceNumber"
-              {...register("invoiceNumber")}
-              disabled={isLoading}
-              dir="ltr"
-              placeholder="شماره فاکتور یا سند"
-            />
+            <Input id="invoiceNumber" {...register("invoiceNumber")} disabled={isLoading} dir="ltr" placeholder="شماره فاکتور یا سند" />
           </div>
 
           <div className="space-y-2">
