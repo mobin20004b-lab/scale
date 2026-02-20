@@ -124,6 +124,25 @@ export default function SettingsPage() {
               دریافت گزارش کامل موجودی انبار با هشدارهای موجودی کم
             </p>
           </div>
+
+
+          <div className="space-y-3 pt-4 border-t">
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary">POST</Badge>
+              <code className="text-sm" dir="ltr">/api/scales/webhook</code>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              دریافت وزن لحظه‌ای از باسکول (ارسال هر ۱ ثانیه)
+            </p>
+            <div className="p-3 rounded-lg bg-muted">
+              <pre className="text-xs font-mono overflow-x-auto" dir="ltr">{`{
+  "serialNumber": "SCALE-001",
+  "token": "scale_webhook_token",
+  "weight": 1250.42,
+  "recordedAt": "2026-02-20T12:00:00.000Z"
+}`}</pre>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

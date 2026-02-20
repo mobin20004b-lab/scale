@@ -18,7 +18,29 @@ async function main() {
     },
   })
 
+  const mainWarehouse = await prisma.warehouse.upsert({
+    where: { code: "WH-001" },
+    update: {},
+    create: {
+      name: "انبار مرکزی",
+      code: "WH-001",
+      location: "کارخانه - سالن اصلی",
+    },
+  })
+
+  await prisma.scale.upsert({
+    where: { serialNumber: "SCALE-001" },
+    update: { warehouseId: mainWarehouse.id },
+    create: {
+      name: "باسکول خط 1",
+      serialNumber: "SCALE-001",
+      warehouseId: mainWarehouse.id,
+      unit: "kg",
+    },
+  })
+
   console.log("Admin user seeded:", admin.username)
+  console.log("Warehouse and default scale seeded")
 }
 
 main()

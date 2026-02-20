@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import useSWR from "swr"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -9,20 +10,24 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Loader2, Scan, Plus } from "lucide-react"
+import { Loader2, Scan, Plus, ScaleIcon } from "lucide-react"
 import { BarcodeScanner } from "./barcode-scanner"
+
+const fetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error("failed to fetch")
+  }
+  return res.json()
+}
 
 const stockInSchema = z.object({
   productId: z.string().min(1, "محصول را انتخاب کنید"),
-  quantity: z.string().min(0.01, "مقدار باید بیشتر از صفر باشد"),
+  warehouseId: z.string().min(1, "انبار را انتخاب کنید"),
+  scaleId: z.string().optional(),
+  quantity: z.string().min(1, "مقدار باید بیشتر از صفر باشد"),
   supplier: z.string().optional(),
   invoiceNumber: z.string().optional(),
   notes: z.string().optional(),
@@ -37,30 +42,65 @@ interface Product {
   unit: string
 }
 
-interface StockInFormProps {
-  products: Product[]
+interface Warehouse {
+  id: string
+  name: string
+  code: string
 }
 
-export function StockInForm({ products }: StockInFormProps) {
+interface Scale {
+  id: string
+  name: string
+  warehouseId: string
+  unit: string
+  lastWeight: number | null
+  warehouse: {
+    name: string
+  }
+}
+
+interface LiveScaleResponse {
+  id: string
+  name: string
+  unit: string
+  lastWeight: number | null
+  lastSeenAt: string | null
+  isOnline: boolean
+}
+
+interface StockInFormProps {
+  products: Product[]
+  warehouses: Warehouse[]
+  scales: Scale[]
+}
+
+export function StockInForm({ products, warehouses, scales }: StockInFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("")
+  const [selectedScaleId, setSelectedScaleId] = useState<string>("")
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    setValue,
-    reset,
-  } = useForm<StockInFormData>({
+  const { register, handleSubmit, formState: { errors }, setValue, reset } = useForm<StockInFormData>({
     resolver: zodResolver(stockInSchema),
   })
 
+  const availableScales = useMemo(
+    () => scales.filter((scale) => scale.warehouseId === selectedWarehouseId),
+    [scales, selectedWarehouseId]
+  )
+
+  const { data: liveScale } = useSWR<LiveScaleResponse>(
+    selectedScaleId ? `/api/scales/${selectedScaleId}/live` : null,
+    fetcher,
+    { refreshInterval: 1000 }
+  )
+
   const handleBarcodeScanned = (barcode: string) => {
-    const product = products.find(p => p.barcode === barcode)
+    const product = products.find((p) => p.barcode === barcode)
     if (product) {
-      setValue("productId", product.id.toString())
+      setValue("productId", product.id)
       setSelectedProduct(product)
       setShowScanner(false)
       toast.success(`محصول پیدا شد: ${product.name}`)
@@ -73,20 +113,23 @@ export function StockInForm({ products }: StockInFormProps) {
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/stock-in', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/stock-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
-          productId: data.productId,
-          quantity: parseFloat(data.quantity)
-        })
+          quantity: parseFloat(data.quantity),
+          scaleId: data.scaleId || null,
+          weight: liveScale?.lastWeight,
+        }),
       })
 
       if (response.ok) {
         toast.success("ورود کالا با موفقیت ثبت شد")
         reset()
         setSelectedProduct(null)
+        setSelectedWarehouseId("")
+        setSelectedScaleId("")
         router.refresh()
       } else {
         const error = await response.json()
@@ -115,38 +158,94 @@ export function StockInForm({ products }: StockInFormProps) {
               <Select
                 onValueChange={(value) => {
                   setValue("productId", value)
-                  const product = products.find(p => p.id.toString() === value)
+                  const product = products.find((p) => p.id === value)
                   setSelectedProduct(product || null)
                 }}
-                value={selectedProduct?.id.toString()}
+                value={selectedProduct?.id}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="محصول را انتخاب کنید" />
                 </SelectTrigger>
                 <SelectContent>
                   {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id.toString()}>
+                    <SelectItem key={product.id} value={product.id}>
                       {product.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => setShowScanner(!showScanner)}
-              >
+              <Button type="button" variant="outline" size="icon" onClick={() => setShowScanner(!showScanner)}>
                 <Scan className="size-4" />
               </Button>
             </div>
-            {errors.productId && (
-              <p className="text-sm text-destructive">{errors.productId.message}</p>
-            )}
+            {errors.productId && <p className="text-sm text-destructive">{errors.productId.message}</p>}
           </div>
 
-          {showScanner && (
-            <BarcodeScanner onScan={handleBarcodeScanned} />
+          {showScanner && <BarcodeScanner onScan={handleBarcodeScanned} />}
+
+          <div className="space-y-2">
+            <Label>انبار *</Label>
+            <Select
+              onValueChange={(value) => {
+                setValue("warehouseId", value)
+                setSelectedWarehouseId(value)
+                setSelectedScaleId("")
+                setValue("scaleId", "")
+              }}
+              value={selectedWarehouseId}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="انبار را انتخاب کنید" />
+              </SelectTrigger>
+              <SelectContent>
+                {warehouses.map((warehouse) => (
+                  <SelectItem key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name} ({warehouse.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.warehouseId && <p className="text-sm text-destructive">{errors.warehouseId.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label>باسکول (اختیاری)</Label>
+            <Select
+              onValueChange={(value) => {
+                setValue("scaleId", value === "manual" ? "" : value)
+                setSelectedScaleId(value === "manual" ? "" : value)
+              }}
+              value={selectedScaleId || "manual"}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="باسکول را انتخاب کنید" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manual">ورود دستی</SelectItem>
+                {availableScales.map((scale) => (
+                  <SelectItem key={scale.id} value={scale.id}>
+                    {scale.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedScaleId && (
+            <div className="p-3 rounded-lg border bg-muted/40 space-y-1">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ScaleIcon className="size-4" />
+                وزن لحظه‌ای باسکول
+              </div>
+              <p className="text-lg font-bold" dir="ltr">
+                {liveScale?.lastWeight !== null && liveScale?.lastWeight !== undefined
+                  ? `${Number(liveScale.lastWeight).toFixed(2)} ${liveScale.unit}`
+                  : "---"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                وضعیت: {liveScale?.isOnline ? "آنلاین" : "آفلاین"} (به‌روزرسانی هر ۱ ثانیه)
+              </p>
+            </div>
           )}
 
           {selectedProduct && (
@@ -168,31 +267,17 @@ export function StockInForm({ products }: StockInFormProps) {
               dir="ltr"
               placeholder={selectedProduct ? `به ${selectedProduct.unit}` : "مقدار"}
             />
-            {errors.quantity && (
-              <p className="text-sm text-destructive">{errors.quantity.message}</p>
-            )}
+            {errors.quantity && <p className="text-sm text-destructive">{errors.quantity.message}</p>}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="supplier">تامین‌کننده</Label>
-            <Input
-              id="supplier"
-              {...register("supplier")}
-              disabled={isLoading}
-              dir="rtl"
-              placeholder="نام تامین‌کننده"
-            />
+            <Input id="supplier" {...register("supplier")} disabled={isLoading} dir="rtl" placeholder="نام تامین‌کننده" />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="invoiceNumber">شماره فاکتور</Label>
-            <Input
-              id="invoiceNumber"
-              {...register("invoiceNumber")}
-              disabled={isLoading}
-              dir="ltr"
-              placeholder="شماره فاکتور یا سند"
-            />
+            <Input id="invoiceNumber" {...register("invoiceNumber")} disabled={isLoading} dir="ltr" placeholder="شماره فاکتور یا سند" />
           </div>
 
           <div className="space-y-2">
