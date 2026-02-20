@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, ShieldCheck } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -28,9 +28,16 @@ export function LowStockAlert({ products }: LowStockAlertProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {products.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            همه محصولات در وضعیت مناسبی هستند
-          </p>
+          <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-6 text-center">
+            <ShieldCheck className="size-10 text-emerald-600" />
+            <p className="font-medium">عالیه! هشدار کم‌موجودی ندارید</p>
+            <p className="text-sm text-muted-foreground">
+              حداقل موجودی همه کالاها رعایت شده است. می‌توانید موجودی فعلی محصولات را هم مرور کنید.
+            </p>
+            <Link href="/dashboard/products">
+              <Button variant="outline">مشاهده محصولات</Button>
+            </Link>
+          </div>
         ) : (
           <>
             <Alert variant="destructive">
