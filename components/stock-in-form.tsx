@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -56,6 +56,7 @@ interface StockInFormProps {
 
 export function StockInForm({ products, warehouses, scales }: StockInFormProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
@@ -78,6 +79,18 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
     () => scales.filter((scale) => scale.warehouseId === selectedWarehouseId),
     [scales, selectedWarehouseId]
   )
+
+  useEffect(() => {
+    const presetProductId = searchParams.get("productId")
+
+    if (!presetProductId) return
+
+    const product = products.find((p) => p.id === presetProductId)
+    if (!product) return
+
+    setValue("productId", product.id)
+    setSelectedProduct(product)
+  }, [products, searchParams, setValue])
 
   useEffect(() => {
     if (!selectedScaleId) {

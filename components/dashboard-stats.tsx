@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Package, Weight, TrendingUp, TrendingDown } from "lucide-react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 interface DashboardStatsProps {
   totalProducts: number
@@ -32,13 +34,21 @@ export function DashboardStats({
       title: "ورودی‌ها",
       value: totalStockIns,
       icon: TrendingUp,
-      color: "text-green-600"
+      color: "text-green-600",
+      action: {
+        href: "/dashboard/stock-in",
+        label: "ثبت ورود"
+      }
     },
     {
       title: "خروجی‌ها",
       value: totalStockOuts,
       icon: TrendingDown,
-      color: "text-orange-600"
+      color: "text-orange-600",
+      action: {
+        href: "/dashboard/stock-out",
+        label: "ثبت خروج"
+      }
     }
   ]
 
@@ -56,6 +66,13 @@ export function DashboardStats({
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{stat.value}</div>
+              {stat.action && (
+                <Link href={stat.action.href} className="mt-3 inline-block">
+                  <Button size="sm" variant="outline">
+                    {stat.action.label}
+                  </Button>
+                </Link>
+              )}
             </CardContent>
           </Card>
         )
