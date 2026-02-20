@@ -115,11 +115,6 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     };
   }, []);
 
-  const activeScales = useMemo(
-    () => localScales.filter((scale) => scale.isActive),
-    [localScales],
-  );
-
   const visibleScales = useMemo(() => {
     return localScales.filter((scale) => {
       const matchesSearch = scale.name
@@ -135,8 +130,13 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     });
   }, [localScales, search, warehouseFilter, statusFilter]);
 
+  const visibleScaleIds = useMemo(
+    () => visibleScales.map((scale) => scale.id),
+    [visibleScales],
+  );
+
   useEffect(() => {
-    if (activeScales.length === 0) {
+    if (visibleScaleIds.length === 0) {
       setLiveWeights({});
       setWeightsError(null);
       setIsLoadingWeights(false);
@@ -144,6 +144,10 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     }
 
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const getRefreshInterval = () =>
+      document.visibilityState === "visible" ? 1000 : 7000;
 
     const fetchWeights = async ({ initialLoad = false } = {}) => {
       if (initialLoad) {
@@ -152,30 +156,39 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
 
       let hasError = false;
 
-      await Promise.all(
-        activeScales.map(async (scale) => {
-          try {
-            const response = await fetch(`/api/scales/${scale.id}/weight`);
-            if (!response.ok) {
-              hasError = true;
-              return;
-            }
+      try {
+        const params = new URLSearchParams({ ids: visibleScaleIds.join(",") });
+        const response = await fetch(`/api/scales/live?${params.toString()}`);
+        if (!response.ok) {
+          hasError = true;
+        } else {
+          const payload = (await response.json()) as {
+            scales: Array<{
+              id: string;
+              lastWeight: number | null;
+              lastWeightAt: string | null;
+            }>;
+          };
 
-            const payload = await response.json();
-            if (!cancelled) {
-              setLiveWeights((previous) => ({
-                ...previous,
-                [scale.id]: {
-                  lastWeight: payload.lastWeight,
-                  lastWeightAt: payload.lastWeightAt,
-                },
-              }));
-            }
-          } catch {
-            hasError = true;
+          if (!cancelled) {
+            const nextWeights: Record<
+              string,
+              { lastWeight: number | null; lastWeightAt: string | null }
+            > = {};
+
+            payload.scales.forEach((scale) => {
+              nextWeights[scale.id] = {
+                lastWeight: scale.lastWeight,
+                lastWeightAt: scale.lastWeightAt,
+              };
+            });
+
+            setLiveWeights(nextWeights);
           }
-        }),
-      );
+        }
+      } catch {
+        hasError = true;
+      }
 
       if (!cancelled) {
         setWeightsError(
@@ -189,14 +202,36 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
       }
     };
 
-    fetchWeights({ initialLoad: true });
-    const interval = setInterval(() => fetchWeights(), 1000);
+    const scheduleNext = () => {
+      if (cancelled) {
+        return;
+      }
+
+      timer = setTimeout(async () => {
+        await fetchWeights();
+        scheduleNext();
+      }, getRefreshInterval());
+    };
+
+    const refreshNow = async () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      await fetchWeights();
+      scheduleNext();
+    };
+
+    void fetchWeights({ initialLoad: true }).then(() => scheduleNext());
+    document.addEventListener("visibilitychange", refreshNow);
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timer) {
+        clearTimeout(timer);
+      }
+      document.removeEventListener("visibilitychange", refreshNow);
     };
-  }, [activeScales, weightsRefreshKey]);
+  }, [visibleScaleIds, weightsRefreshKey]);
 
   const submitScale = async () => {
     try {
@@ -534,7 +569,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           );
         })}
 
-        {isLoadingWeights && activeScales.length > 0 && (
+        {isLoadingWeights && visibleScaleIds.length > 0 && (
           <div className="space-y-2">
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-20 w-full" />
