@@ -19,6 +19,7 @@ const productSchema = z.object({
   category: z.string().optional(),
   unit: z.string().min(1, "واحد اندازه‌گیری الزامی است"),
   minStock: z.string().min(0, "حداقل موجودی باید مثبت باشد"),
+  weightPerUnit: z.string().min(0, "وزن هر واحد باید مثبت باشد"),
   description: z.string().optional(),
 })
 
@@ -45,9 +46,11 @@ export function ProductForm({ product }: ProductFormProps) {
       category: product.category || "",
       unit: product.unit,
       minStock: product.minStock.toString(),
+      weightPerUnit: product.weightPerUnit?.toString() || "",
       description: product.description || "",
     } : {
-      unit: "کیلوگرم"
+      unit: "کیلوگرم",
+      weightPerUnit: ""
     }
   })
 
@@ -55,10 +58,10 @@ export function ProductForm({ product }: ProductFormProps) {
     setIsLoading(true)
 
     try {
-      const url = product 
+      const url = product
         ? `/api/products/${product.id}`
         : '/api/products'
-      
+
       const method = product ? 'PUT' : 'POST'
 
       const response = await fetch(url, {
@@ -66,7 +69,8 @@ export function ProductForm({ product }: ProductFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
-          minStock: parseFloat(data.minStock)
+          minStock: parseFloat(data.minStock),
+          weightPerUnit: parseFloat(data.weightPerUnit)
         })
       })
 
@@ -162,6 +166,21 @@ export function ProductForm({ product }: ProductFormProps) {
               />
               {errors.minStock && (
                 <p className="text-sm text-destructive">{errors.minStock.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="weightPerUnit">وزن هر واحد (گرم) *</Label>
+              <Input
+                id="weightPerUnit"
+                type="number"
+                step="0.01"
+                {...register("weightPerUnit")}
+                disabled={isLoading}
+                dir="ltr"
+              />
+              {errors.weightPerUnit && (
+                <p className="text-sm text-destructive">{errors.weightPerUnit.message}</p>
               )}
             </div>
           </div>

@@ -30,9 +30,9 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { name, sku, barcode, category, unit, minStock, description } = body
+    const { name, sku, barcode, category, unit, minStock, description, weightPerUnit } = body
 
-    if (!name || !unit || minStock === undefined) {
+    if (!name || !unit || minStock === undefined || weightPerUnit === undefined) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -47,6 +47,7 @@ export async function POST(request: Request) {
         category: category || null,
         unit,
         minStock: parseFloat(minStock),
+        weightPerUnit: parseFloat(weightPerUnit),
         description: description || null,
         currentStock: 0
       }

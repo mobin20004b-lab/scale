@@ -14,7 +14,7 @@ export async function PUT(
 
     const { id } = await context.params
     const body = await request.json()
-    const { name, sku, barcode, category, unit, minStock, description } = body
+    const { name, sku, barcode, category, unit, minStock, description, weightPerUnit } = body
 
     const product = await prisma.product.update({
       where: { id },
@@ -25,6 +25,7 @@ export async function PUT(
         category: category || null,
         unit,
         minStock: parseFloat(minStock),
+        weightPerUnit: weightPerUnit !== undefined ? parseFloat(weightPerUnit) : undefined,
         description: description || null,
       }
     })
@@ -61,7 +62,7 @@ export async function DELETE(
     }
 
     const { id } = await context.params
-    
+
     const product = await prisma.product.findUnique({
       where: { id }
     })
