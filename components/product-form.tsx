@@ -4,26 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { productFormSchema } from "@/lib/schemas/inventory";
 
-const productSchema = z.object({
-  name: z.string().min(1, "نام محصول الزامی است"),
-  sku: z.string().optional(),
-  barcode: z.string().optional(),
-  category: z.string().optional(),
-  unit: z.string().min(1, "واحد اندازه‌گیری الزامی است"),
-  minStock: z.string().min(0, "حداقل موجودی باید مثبت باشد"),
-  weightPerUnit: z.string().min(0, "وزن هر واحد باید مثبت باشد"),
-  description: z.string().optional(),
-});
-
-type ProductFormData = z.infer<typeof productSchema>;
+type ProductFormData = import("zod").infer<typeof productFormSchema>;
 
 interface ProductFormProps {
   product?: any;
@@ -38,7 +27,7 @@ export function ProductForm({ product }: ProductFormProps) {
     handleSubmit,
     formState: { errors },
   } = useForm<ProductFormData>({
-    resolver: zodResolver(productSchema),
+    resolver: zodResolver(productFormSchema),
     defaultValues: product
       ? {
           name: product.name,

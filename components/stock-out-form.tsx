@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,20 +20,9 @@ import { Loader2, Scan, Minus, AlertTriangle } from "lucide-react";
 import { BarcodeScanner } from "./barcode-scanner";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
+import { stockOutFormSchema } from "@/lib/schemas/inventory";
 
-const stockOutSchema = z.object({
-  productId: z.string().min(1, "محصول را انتخاب کنید"),
-  quantity: z
-    .string()
-    .refine((value) => value.trim().length > 0, "مقدار را وارد کنید")
-    .refine((value) => !Number.isNaN(Number(value)), "مقدار باید عددی باشد")
-    .refine((value) => Number(value) > 0, "مقدار باید بیشتر از صفر باشد"),
-  customer: z.string().optional(),
-  invoiceNumber: z.string().optional(),
-  notes: z.string().optional(),
-});
-
-type StockOutFormData = z.infer<typeof stockOutSchema>;
+type StockOutFormData = import("zod").infer<typeof stockOutFormSchema>;
 
 interface Product {
   id: string;
@@ -66,7 +54,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
     reset,
     watch,
   } = useForm<StockOutFormData>({
-    resolver: zodResolver(stockOutSchema),
+    resolver: zodResolver(stockOutFormSchema),
     mode: "onChange",
     defaultValues: {
       productId: "",

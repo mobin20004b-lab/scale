@@ -1,64 +1,52 @@
-import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { ZodError } from "zod";
+import { validationErrorResponse } from "@/lib/api-validation";
+import { stockOutPayloadSchema } from "@/lib/schemas/inventory";
 
 export async function POST(request: Request) {
   try {
-    const session = await auth()
+    const session = await auth();
     if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json()
-    const { productId, quantity, customer, invoiceNumber, notes } = body
+    const parsed = stockOutPayloadSchema.parse(await request.json());
 
-    if (!productId || !quantity || quantity <= 0) {
-      return NextResponse.json(
-        { error: "Missing or invalid required fields" },
-        { status: 400 }
-      )
-    }
-
-    // Get product
     const product = await prisma.product.findUnique({
-      where: { id: productId }
-    })
+      where: { id: parsed.productId },
+    });
 
     if (!product) {
-      return NextResponse.json({ error: "Product not found" }, { status: 404 })
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    // Check if enough quantity available
-    if (Number(product.currentStock) < parseFloat(String(quantity))) {
-      return NextResponse.json(
-        { error: "Insufficient quantity available" },
-        { status: 400 }
-      )
+    if (Number(product.currentStock) < parsed.quantity) {
+      return NextResponse.json({ error: "Insufficient quantity available" }, { status: 400 });
     }
 
-    const parsedQuantity = parseFloat(String(quantity))
-
-    // Create stock out record + update product quantity + activity log atomically
     const stockOut = await prisma.$transaction(async (tx) => {
       const createdStockOut = await tx.stockOut.create({
         data: {
-          productId,
+          productId: parsed.productId,
           userId: (session.user as any).id,
-          quantity: parsedQuantity,
-          customer: customer || null,
-          invoiceNumber: invoiceNumber || null,
-          notes: notes || null
-        }
-      })
+          quantity: parsed.quantity,
+          weight: parsed.quantity,
+          customer: parsed.customer,
+          invoiceNumber: parsed.invoiceNumber,
+          notes: parsed.notes,
+        },
+      });
 
       await tx.product.update({
-        where: { id: productId },
+        where: { id: parsed.productId },
         data: {
           currentStock: {
-            decrement: parsedQuantity
-          }
-        }
-      })
+            decrement: parsed.quantity,
+          },
+        },
+      });
 
       await tx.activity.create({
         data: {
@@ -66,19 +54,20 @@ export async function POST(request: Request) {
           action: "خروج کالا",
           entity: "StockOut",
           entityId: createdStockOut.id,
-          details: `${parsedQuantity} ${product.unit} از "${product.name}" از انبار خارج شد`
-        }
-      })
+          details: `${parsed.quantity} ${product.unit} از "${product.name}" از انبار خارج شد`,
+        },
+      });
 
-      return createdStockOut
-    })
+      return createdStockOut;
+    });
 
-    return NextResponse.json(stockOut, { status: 201 })
+    return NextResponse.json(stockOut, { status: 201 });
   } catch (error) {
-    console.error('[v0] Error creating stock out:', error)
-    return NextResponse.json(
-      { error: "Failed to create stock out" },
-      { status: 500 }
-    )
+    if (error instanceof ZodError) {
+      return validationErrorResponse(error);
+    }
+
+    console.error("[v0] Error creating stock out:", error);
+    return NextResponse.json({ error: "Failed to create stock out" }, { status: 500 });
   }
 }

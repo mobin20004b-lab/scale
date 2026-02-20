@@ -149,3 +149,17 @@ enum UserRole {
   USER
   VIEWER
 }
+
+model IdempotencyRecord {
+  id             String   @id @default(cuid())
+  key            String
+  endpoint       String
+  responseStatus Int
+  responseBody   Json
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([key, endpoint])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
