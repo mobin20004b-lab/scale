@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -20,10 +20,15 @@ import { toast } from "sonner"
 import { Loader2, Scan, Minus, AlertTriangle } from "lucide-react"
 import { BarcodeScanner } from "./barcode-scanner"
 import { Badge } from "./ui/badge"
+import { cn } from "@/lib/utils"
 
 const stockOutSchema = z.object({
   productId: z.string().min(1, "محصول را انتخاب کنید"),
-  quantity: z.string().min(0.01, "مقدار باید بیشتر از صفر باشد"),
+  quantity: z
+    .string()
+    .refine((value) => value.trim().length > 0, "مقدار را وارد کنید")
+    .refine((value) => !Number.isNaN(Number(value)), "مقدار باید عددی باشد")
+    .refine((value) => Number(value) > 0, "مقدار باید بیشتر از صفر باشد"),
   customer: z.string().optional(),
   invoiceNumber: z.string().optional(),
   notes: z.string().optional(),
@@ -54,20 +59,48 @@ export function StockOutForm({ products }: StockOutFormProps) {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
     setValue,
     reset,
     watch,
   } = useForm<StockOutFormData>({
     resolver: zodResolver(stockOutSchema),
+    mode: "onChange",
+    defaultValues: {
+      productId: "",
+      quantity: "",
+      customer: "",
+      invoiceNumber: "",
+      notes: "",
+    },
   })
 
   const quantity = watch("quantity")
 
+  const parsedQuantity = useMemo(() => {
+    if (!quantity?.trim()) return null
+
+    const value = Number(quantity)
+    return Number.isNaN(value) ? null : value
+  }, [quantity])
+
+  const isOverWithdrawal =
+    selectedProduct !== null && parsedQuantity !== null && parsedQuantity > Number(selectedProduct.currentStock)
+
+  const remainingAfterOut =
+    selectedProduct !== null && parsedQuantity !== null
+      ? Number(selectedProduct.currentStock) - parsedQuantity
+      : null
+
+  const willBeLowStock =
+    remainingAfterOut !== null && selectedProduct !== null && remainingAfterOut <= Number(selectedProduct.minStock)
+
+  const isSubmitDisabled = isLoading || !isValid || !selectedProduct || isOverWithdrawal
+
   const handleBarcodeScanned = (barcode: string) => {
     const product = products.find(p => p.barcode === barcode)
     if (product) {
-      setValue("productId", product.id.toString())
+      setValue("productId", product.id.toString(), { shouldDirty: true, shouldTouch: true, shouldValidate: true })
       setSelectedProduct(product)
       setShowScanner(false)
       toast.success(`محصول پیدا شد: ${product.name}`)
@@ -114,12 +147,6 @@ export function StockOutForm({ products }: StockOutFormProps) {
     }
   }
 
-  const remainingAfterOut = selectedProduct && quantity
-    ? Number(selectedProduct.currentStock) - parseFloat(quantity)
-    : null
-
-  const willBeLowStock = remainingAfterOut !== null && 
-    remainingAfterOut <= Number(selectedProduct?.minStock)
 
   return (
     <Card>
@@ -136,13 +163,16 @@ export function StockOutForm({ products }: StockOutFormProps) {
             <div className="flex gap-2">
               <Select
                 onValueChange={(value) => {
-                  setValue("productId", value)
+                  setValue("productId", value, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
                   const product = products.find(p => p.id.toString() === value)
                   setSelectedProduct(product || null)
                 }}
                 value={selectedProduct?.id.toString()}
               >
-                <SelectTrigger aria-label="انتخاب محصول">
+                <SelectTrigger
+                  aria-label="انتخاب محصول"
+                  className={cn(errors.productId && "border-destructive focus-visible:ring-destructive")}
+                >
                   <SelectValue placeholder="محصول را انتخاب کنید" />
                 </SelectTrigger>
                 <SelectContent>
@@ -208,9 +238,23 @@ export function StockOutForm({ products }: StockOutFormProps) {
               disabled={isLoading || !selectedProduct}
               dir="ltr"
               placeholder={selectedProduct ? `به ${selectedProduct.unit}` : "مقدار"}
+              aria-invalid={!!errors.quantity || isOverWithdrawal}
+              className={cn((errors.quantity || isOverWithdrawal) && "border-destructive focus-visible:ring-destructive")}
             />
             {errors.quantity && (
               <p className="text-sm text-destructive">{errors.quantity.message}</p>
+            )}
+            {isOverWithdrawal && (
+              <p className="text-sm text-destructive">
+                مقدار خروج از موجودی فعلی بیشتر است. مقدار را کمتر از {Number(selectedProduct?.currentStock).toFixed(2)}
+                {" "}
+                {selectedProduct?.unit} وارد کنید.
+              </p>
+            )}
+            {willBeLowStock && !isOverWithdrawal && (
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                هشدار: پس از ثبت خروج، موجودی به آستانه هشدار می‌رسد.
+              </p>
             )}
           </div>
 
@@ -248,7 +292,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
             />
           </div>
 
-          <Button type="submit" disabled={isLoading || !selectedProduct} className="w-full" aria-busy={isLoading}>
+          <Button type="submit" disabled={isSubmitDisabled} className="w-full" aria-busy={isLoading}>
             {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
             ثبت خروج کالا
           </Button>

@@ -19,10 +19,15 @@ import {
 import { toast } from "sonner"
 import { Loader2, Scan, Plus } from "lucide-react"
 import { BarcodeScanner } from "./barcode-scanner"
+import { cn } from "@/lib/utils"
 
 const stockInSchema = z.object({
   productId: z.string().min(1, "محصول را انتخاب کنید"),
-  quantity: z.string().min(1, "مقدار باید بیشتر از صفر باشد"),
+  quantity: z
+    .string()
+    .refine((value) => value.trim().length > 0, "مقدار را وارد کنید")
+    .refine((value) => !Number.isNaN(Number(value)), "مقدار باید عددی باشد")
+    .refine((value) => Number(value) > 0, "مقدار باید بیشتر از صفر باشد"),
   supplier: z.string().optional(),
   invoiceNumber: z.string().optional(),
   notes: z.string().optional(),
@@ -68,12 +73,23 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
     setValue,
     reset,
+    watch,
   } = useForm<StockInFormData>({
     resolver: zodResolver(stockInSchema),
+    mode: "onChange",
+    defaultValues: {
+      productId: "",
+      quantity: "",
+      supplier: "",
+      invoiceNumber: "",
+      notes: "",
+    },
   })
+
+  const productId = watch("productId")
 
   const filteredScales = useMemo(
     () => scales.filter((scale) => scale.warehouseId === selectedWarehouseId),
@@ -88,7 +104,7 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
     const product = products.find((p) => p.id === presetProductId)
     if (!product) return
 
-    setValue("productId", product.id)
+    setValue("productId", product.id, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
     setSelectedProduct(product)
   }, [products, searchParams, setValue])
 
@@ -114,7 +130,7 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
   const handleBarcodeScanned = (barcode: string) => {
     const product = products.find((p) => p.barcode === barcode)
     if (product) {
-      setValue("productId", product.id.toString())
+      setValue("productId", product.id.toString(), { shouldDirty: true, shouldTouch: true, shouldValidate: true })
       setSelectedProduct(product)
       setShowScanner(false)
       toast.success(`محصول پیدا شد: ${product.name}`)
@@ -218,7 +234,7 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
                 variant="secondary"
                 onClick={() => {
                   if (liveWeight !== null) {
-                    setValue("quantity", String(liveWeight))
+                    setValue("quantity", String(liveWeight), { shouldDirty: true, shouldTouch: true, shouldValidate: true })
                   }
                 }}
               >
@@ -232,13 +248,16 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
             <div className="flex gap-2">
               <Select
                 onValueChange={(value) => {
-                  setValue("productId", value)
+                  setValue("productId", value, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
                   const product = products.find((p) => p.id.toString() === value)
                   setSelectedProduct(product || null)
                 }}
                 value={selectedProduct?.id.toString()}
               >
-                <SelectTrigger aria-label="انتخاب محصول">
+                <SelectTrigger
+                  aria-label="انتخاب محصول"
+                  className={cn(errors.productId && "border-destructive focus-visible:ring-destructive")}
+                >
                   <SelectValue placeholder="محصول را انتخاب کنید" />
                 </SelectTrigger>
                 <SelectContent>
@@ -297,6 +316,8 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
               disabled={isLoading}
               dir="ltr"
               placeholder={selectedProduct ? `به ${selectedProduct.unit}` : "مقدار"}
+              aria-invalid={!!errors.quantity}
+              className={cn(errors.quantity && "border-destructive focus-visible:ring-destructive")}
             />
             {errors.quantity && (
               <p className="text-sm text-destructive">{errors.quantity.message}</p>
@@ -325,7 +346,12 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
             />
           </div>
 
-          <Button type="submit" disabled={isLoading} className="w-full" aria-busy={isLoading}>
+          <Button
+            type="submit"
+            disabled={isLoading || !isValid || !productId}
+            className="w-full"
+            aria-busy={isLoading}
+          >
             {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
             ثبت ورود کالا
           </Button>
