@@ -1,16 +1,90 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Code, Key, Database, Shield } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Code,
+  Database,
+  Key,
+  Lock,
+  Settings,
+  Shield,
+  UserCog,
+  Users
+} from "lucide-react"
+
+const settingsSections = [
+  {
+    title: "مدیریت کاربران",
+    description: "تعریف نقش‌ها، فعال/غیرفعال کردن کاربران و مدیریت دسترسی‌ها",
+    icon: Users,
+    items: ["ایجاد و حذف کاربر", "تخصیص نقش‌ها", "ثبت لاگ ورود کاربران"]
+  },
+  {
+    title: "مدیریت API",
+    description: "ایجاد و چرخش توکن‌ها، محدودیت نرخ و سطح دسترسی سرویس‌ها",
+    icon: UserCog,
+    items: ["صدور توکن جدید", "تنظیم Rate Limit", "تعریف دسترسی Endpoint"]
+  },
+  {
+    title: "تغییر رمز عبور",
+    description: "به‌روزرسانی رمز عبور حساب و اعمال سیاست‌های امنیتی",
+    icon: Lock,
+    items: ["حداقل پیچیدگی رمز", "الزام تغییر دوره‌ای", "خروج از تمام نشست‌ها"]
+  },
+  {
+    title: "تنظیمات عمومی سیستم",
+    description: "پیکربندی اعلان‌ها، زبان، منطقه زمانی و تنظیمات پایه",
+    icon: Settings,
+    items: ["تنظیم اعلان‌ها", "مدیریت زبان", "پیکربندی منطقه زمانی"]
+  }
+]
 
 export default function SettingsPage() {
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-5xl">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">تنظیمات و API</h2>
+        <h2 className="text-3xl font-bold tracking-tight">تنظیمات سیستم</h2>
         <p className="text-muted-foreground">
-          مستندات API برای یکپارچه‌سازی با سیستم‌های خارجی
+          مدیریت کاربران، امنیت، API و مستندات یکپارچه‌سازی در یک بخش
         </p>
       </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {settingsSections.map((section) => {
+          const Icon = section.icon
+
+          return (
+            <Card key={section.title}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Icon className="size-5" />
+                  {section.title}
+                </CardTitle>
+                <CardDescription>{section.description}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {section.items.map((item) => (
+                  <div key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <span className="mt-2 size-1.5 rounded-full bg-primary" />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Code className="size-5" />
+            مستندات API
+          </CardTitle>
+          <CardDescription>
+            برای جلوگیری از شلوغی بخش تنظیمات، جزئیات یکپارچه‌سازی API در این قسمت مستند شده است
+          </CardDescription>
+        </CardHeader>
+      </Card>
 
       <Card>
         <CardHeader>
