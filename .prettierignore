@@ -1,0 +1,6 @@
+node_modules
+.next
+out
+coverage
+bun.lock
+pnpm-lock.yaml
