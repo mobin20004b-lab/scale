@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { useEffect, useMemo, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useEffect, useMemo, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -9,56 +9,62 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { format } from "date-fns"
-import { faIR } from "date-fns/locale"
-import { FileText, FilterX } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useRouter } from "next/navigation"
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
+import { faIR } from "date-fns/locale";
+import { FileText, FilterX } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useRouter } from "next/navigation";
 
 interface StockIn {
-  id: string
-  quantity: number
-  supplier: string | null
-  invoiceNumber: string | null
-  createdAt: Date
+  id: string;
+  quantity: number;
+  supplier: string | null;
+  invoiceNumber: string | null;
+  createdAt: Date;
   product: {
-    name: string
-    unit: string
-  }
+    name: string;
+    unit: string;
+  };
   user: {
-    full_name: string
-  }
+    full_name: string;
+  };
 }
 
 interface StockOut {
-  id: string
-  quantity: number
-  customer: string | null
-  invoiceNumber: string | null
-  createdAt: Date
+  id: string;
+  quantity: number;
+  customer: string | null;
+  invoiceNumber: string | null;
+  createdAt: Date;
   product: {
-    name: string
-    unit: string
-  }
+    name: string;
+    unit: string;
+  };
   user: {
-    full_name: string
-  }
+    full_name: string;
+  };
 }
 
 interface ReportsTableProps {
-  stockIns: StockIn[]
-  stockOuts: StockOut[]
+  stockIns: StockIn[];
+  stockOuts: StockOut[];
 }
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50]
+const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
 export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
-  const router = useRouter()
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const router = useRouter();
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const transactions = useMemo(
     () =>
@@ -87,20 +93,21 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
         })),
       ].sort((a, b) => b.date.getTime() - a.date.getTime()),
     [stockIns, stockOuts],
-  )
+  );
 
   const paginatedTransactions = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
-    return transactions.slice(start, start + pageSize)
-  }, [transactions, currentPage, pageSize])
+    const start = (currentPage - 1) * pageSize;
+    return transactions.slice(start, start + pageSize);
+  }, [transactions, currentPage, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(transactions.length / pageSize))
-  const rangeStart = transactions.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
-  const rangeEnd = Math.min(currentPage * pageSize, transactions.length)
+  const totalPages = Math.max(1, Math.ceil(transactions.length / pageSize));
+  const rangeStart =
+    transactions.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const rangeEnd = Math.min(currentPage * pageSize, transactions.length);
 
   useEffect(() => {
-    setCurrentPage(1)
-  }, [pageSize, transactions.length])
+    setCurrentPage(1);
+  }, [pageSize, transactions.length]);
 
   return (
     <Card>
@@ -117,7 +124,10 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
           </span>
           <div className="flex items-center gap-2">
             <span>تعداد در صفحه</span>
-            <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(value) => setPageSize(Number(value))}
+            >
               <SelectTrigger className="w-[90px]">
                 <SelectValue />
               </SelectTrigger>
@@ -133,16 +143,30 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
         </div>
 
         <div className="border rounded-lg overflow-auto max-h-[65vh]">
-          <Table>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky top-0 z-20 bg-background">تاریخ</TableHead>
-                <TableHead className="sticky top-0 z-20 bg-background">نوع</TableHead>
-                <TableHead className="sticky top-0 z-20 bg-background">محصول</TableHead>
-                <TableHead className="sticky top-0 z-20 bg-background">مقدار</TableHead>
-                <TableHead className="sticky top-0 z-20 bg-background">طرف معامله</TableHead>
-                <TableHead className="sticky top-0 z-20 bg-background">شماره مرجع</TableHead>
-                <TableHead className="sticky top-0 z-20 bg-background">کاربر</TableHead>
+                <TableHead className="sticky top-0 z-20 bg-background">
+                  تاریخ
+                </TableHead>
+                <TableHead className="sticky top-0 z-20 bg-background">
+                  نوع
+                </TableHead>
+                <TableHead className="sticky top-0 z-20 bg-background">
+                  محصول
+                </TableHead>
+                <TableHead className="sticky top-0 z-20 bg-background">
+                  مقدار
+                </TableHead>
+                <TableHead className="sticky top-0 z-20 bg-background">
+                  طرف معامله
+                </TableHead>
+                <TableHead className="sticky top-0 z-20 bg-background">
+                  شماره مرجع
+                </TableHead>
+                <TableHead className="sticky top-0 z-20 bg-background">
+                  کاربر
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -151,9 +175,16 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
                   <TableCell colSpan={7} className="py-12">
                     <div className="flex flex-col items-center justify-center gap-3 text-center">
                       <FileText className="size-10 text-muted-foreground" />
-                      <p className="font-medium">تراکنشی با فیلترهای فعلی یافت نشد</p>
-                      <p className="text-sm text-muted-foreground">برای مشاهده داده‌ها، فیلترها را پاک کنید.</p>
-                      <Button variant="outline" onClick={() => router.push("/dashboard/reports")}> 
+                      <p className="font-medium">
+                        تراکنشی با فیلترهای فعلی یافت نشد
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        برای مشاهده داده‌ها، فیلترها را پاک کنید.
+                      </p>
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push("/dashboard/reports")}
+                      >
                         <FilterX className="size-4 ml-2" />
                         پاک کردن فیلترها
                       </Button>
@@ -164,14 +195,22 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
                 paginatedTransactions.map((transaction) => (
                   <TableRow key={transaction.id}>
                     <TableCell className="sticky left-0 z-10 bg-background">
-                      {format(transaction.date, "yyyy/MM/dd HH:mm", { locale: faIR })}
+                      {format(transaction.date, "yyyy/MM/dd HH:mm", {
+                        locale: faIR,
+                      })}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={transaction.type === "in" ? "default" : "secondary"}>
+                      <Badge
+                        variant={
+                          transaction.type === "in" ? "default" : "secondary"
+                        }
+                      >
                         {transaction.type === "in" ? "ورودی" : "خروجی"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-medium">{transaction.product}</TableCell>
+                    <TableCell className="font-medium">
+                      {transaction.product}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline">
                         {transaction.type === "in" ? "+" : "-"}
@@ -188,6 +227,70 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
               )}
             </TableBody>
           </Table>
+
+          <div className="space-y-3 p-3 md:hidden">
+            {transactions.length === 0 ? (
+              <div className="rounded-lg border p-6">
+                <div className="flex flex-col items-center justify-center gap-3 text-center">
+                  <FileText className="size-10 text-muted-foreground" />
+                  <p className="font-medium">
+                    تراکنشی با فیلترهای فعلی یافت نشد
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    برای مشاهده داده‌ها، فیلترها را پاک کنید.
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push("/dashboard/reports")}
+                  >
+                    <FilterX className="size-4 ml-2" />
+                    پاک کردن فیلترها
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              paginatedTransactions.map((transaction) => (
+                <div
+                  key={transaction.id}
+                  className="rounded-lg border p-4 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-semibold">{transaction.product}</div>
+                    <Badge
+                      variant={
+                        transaction.type === "in" ? "default" : "secondary"
+                      }
+                    >
+                      {transaction.type === "in" ? "ورودی" : "خروجی"}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                    <span className="text-muted-foreground">تاریخ</span>
+                    <span>
+                      {format(transaction.date, "yyyy/MM/dd HH:mm", {
+                        locale: faIR,
+                      })}
+                    </span>
+                    <span className="text-muted-foreground">مقدار</span>
+                    <span>
+                      <Badge variant="outline">
+                        {transaction.type === "in" ? "+" : "-"}
+                        {transaction.quantity.toFixed(2)} {transaction.unit}
+                      </Badge>
+                    </span>
+                    <span className="text-muted-foreground">طرف معامله</span>
+                    <span>{transaction.party}</span>
+                    <span className="text-muted-foreground">شماره مرجع</span>
+                    <span dir="ltr" className="text-right">
+                      {transaction.reference}
+                    </span>
+                    <span className="text-muted-foreground">کاربر</span>
+                    <span>{transaction.user}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         {transactions.length > 0 && (
@@ -215,5 +318,5 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
