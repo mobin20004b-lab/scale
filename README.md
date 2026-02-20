@@ -99,13 +99,17 @@ docker run --rm -p 3000:3000 --env-file .env warehouse-app
 
 ### GitHub Actions Docker publish
 
-A workflow is included at `.github/workflows/docker-build-push.yml` to build and push images to GHCR on:
+A workflow is included at `.github/workflows/docker-build-push.yml` to build and push images to Docker Hub on:
 - Pushes to `main`
 - Version tags like `v1.0.0`
 - Manual dispatch
 
+Required repository secrets for the workflow:
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN` (Docker Hub access token)
+
 Published image path:
 
 ```text
-ghcr.io/<owner>/<repo>
+docker.io/<dockerhub-username>/<repo>
 ```
