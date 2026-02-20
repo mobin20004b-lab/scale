@@ -358,6 +358,7 @@ export function ProductsTable({
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="size-11"
                             aria-label={`ویرایش ${product.name}`}
                           >
                             <Edit className="size-4" />
@@ -368,7 +369,7 @@ export function ProductsTable({
                             <Button
                               variant="outline"
                               size="icon"
-                              className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                              className="size-11 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
                               aria-label={`حذف ${product.name}`}
                             >
                               <Trash2 className="size-4" />
@@ -462,52 +463,69 @@ export function ProductsTable({
                   key={product.id}
                   className="rounded-lg border p-4 space-y-3 transition-colors hover:bg-muted/40"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-semibold flex items-center gap-2">
-                      {product.name}
-                      {isLowStock(product) && (
-                        <AlertTriangle className="size-4 text-orange-600" />
-                      )}
-                    </div>
-                    <Badge
-                      variant={isLowStock(product) ? "destructive" : "default"}
-                    >
-                      {Number(product.currentStock).toFixed(2)} {product.unit}
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-                    <span className="text-muted-foreground">کد محصول</span>
-                    <span>{product.sku || "-"}</span>
-                    <span className="text-muted-foreground">بارکد</span>
-                    <span dir="ltr" className="text-right">
-                      {product.barcode || "-"}
-                    </span>
-                    <span className="text-muted-foreground">دسته‌بندی</span>
-                    <span>
-                      {product.category ? (
-                        <Badge variant="secondary">{product.category}</Badge>
-                      ) : (
-                        "-"
-                      )}
-                    </span>
-                    <span className="text-muted-foreground">وضعیت</span>
-                    <span>
-                      <span
-                        className={
-                          isLowStock(product)
-                            ? "text-amber-700 dark:text-amber-300 font-medium"
-                            : "text-emerald-700 dark:text-emerald-300 font-medium"
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="font-semibold flex items-center gap-2 text-base">
+                          {product.name}
+                          {isLowStock(product) && (
+                            <AlertTriangle className="size-4 text-orange-600" />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {product.sku
+                            ? `کد محصول: ${product.sku}`
+                            : "کد محصول ثبت نشده"}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={
+                          isLowStock(product) ? "destructive" : "default"
                         }
+                        className="text-sm px-3 py-1"
                       >
-                        {isLowStock(product) ? "کم‌موجودی" : "عادی"}
+                        {Number(product.currentStock).toFixed(2)} {product.unit}
+                      </Badge>
+                    </div>
+
+                    <div className="rounded-md border border-dashed bg-muted/30 p-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          وضعیت موجودی
+                        </span>
+                        <span
+                          className={
+                            isLowStock(product)
+                              ? "text-amber-700 dark:text-amber-300 font-semibold"
+                              : "text-emerald-700 dark:text-emerald-300 font-semibold"
+                          }
+                        >
+                          {isLowStock(product) ? "کم‌موجودی" : "عادی"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                      <span className="text-muted-foreground">بارکد</span>
+                      <span dir="ltr" className="text-right">
+                        {product.barcode || "-"}
                       </span>
-                    </span>
+                      <span className="text-muted-foreground">دسته‌بندی</span>
+                      <span>
+                        {product.category ? (
+                          <Badge variant="secondary">{product.category}</Badge>
+                        ) : (
+                          "-"
+                        )}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex items-center justify-end gap-2 pt-1 border-t border-dashed">
                     <Link href={`/dashboard/products/${product.id}/edit`}>
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="size-11"
                         aria-label={`ویرایش ${product.name}`}
                       >
                         <Edit className="size-4" />
@@ -518,7 +536,7 @@ export function ProductsTable({
                         <Button
                           variant="outline"
                           size="icon"
-                          className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                          className="size-11 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
                           aria-label={`حذف ${product.name}`}
                         >
                           <Trash2 className="size-4" />

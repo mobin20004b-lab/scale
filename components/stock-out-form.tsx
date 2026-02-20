@@ -1,26 +1,26 @@
-"use client"
+"use client";
 
-import { useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import * as z from "zod"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { toast } from "sonner"
-import { Loader2, Scan, Minus, AlertTriangle } from "lucide-react"
-import { BarcodeScanner } from "./barcode-scanner"
-import { Badge } from "./ui/badge"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import { Loader2, Scan, Minus, AlertTriangle } from "lucide-react";
+import { BarcodeScanner } from "./barcode-scanner";
+import { Badge } from "./ui/badge";
+import { cn } from "@/lib/utils";
 
 const stockOutSchema = z.object({
   productId: z.string().min(1, "محصول را انتخاب کنید"),
@@ -32,29 +32,31 @@ const stockOutSchema = z.object({
   customer: z.string().optional(),
   invoiceNumber: z.string().optional(),
   notes: z.string().optional(),
-})
+});
 
-type StockOutFormData = z.infer<typeof stockOutSchema>
+type StockOutFormData = z.infer<typeof stockOutSchema>;
 
 interface Product {
-  id: string
-  name: string
-  barcode: string | null
-  unit: string
-  currentStock: number
-  minStock: number
+  id: string;
+  name: string;
+  barcode: string | null;
+  unit: string;
+  currentStock: number;
+  minStock: number;
 }
 
 interface StockOutFormProps {
-  products: Product[]
+  products: Product[];
 }
 
 export function StockOutForm({ products }: StockOutFormProps) {
-  const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
-  const [showScanner, setShowScanner] = useState(false)
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-  const [scannerStatus, setScannerStatus] = useState<"idle" | "scanning" | "success" | "error">("idle")
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [scannerStatus, setScannerStatus] = useState<
+    "idle" | "scanning" | "success" | "error"
+  >("idle");
 
   const {
     register,
@@ -73,80 +75,88 @@ export function StockOutForm({ products }: StockOutFormProps) {
       invoiceNumber: "",
       notes: "",
     },
-  })
+  });
 
-  const quantity = watch("quantity")
+  const quantity = watch("quantity");
 
   const parsedQuantity = useMemo(() => {
-    if (!quantity?.trim()) return null
+    if (!quantity?.trim()) return null;
 
-    const value = Number(quantity)
-    return Number.isNaN(value) ? null : value
-  }, [quantity])
+    const value = Number(quantity);
+    return Number.isNaN(value) ? null : value;
+  }, [quantity]);
 
   const isOverWithdrawal =
-    selectedProduct !== null && parsedQuantity !== null && parsedQuantity > Number(selectedProduct.currentStock)
+    selectedProduct !== null &&
+    parsedQuantity !== null &&
+    parsedQuantity > Number(selectedProduct.currentStock);
 
   const remainingAfterOut =
     selectedProduct !== null && parsedQuantity !== null
       ? Number(selectedProduct.currentStock) - parsedQuantity
-      : null
+      : null;
 
   const willBeLowStock =
-    remainingAfterOut !== null && selectedProduct !== null && remainingAfterOut <= Number(selectedProduct.minStock)
+    remainingAfterOut !== null &&
+    selectedProduct !== null &&
+    remainingAfterOut <= Number(selectedProduct.minStock);
 
-  const isSubmitDisabled = isLoading || !isValid || !selectedProduct || isOverWithdrawal
+  const isSubmitDisabled =
+    isLoading || !isValid || !selectedProduct || isOverWithdrawal;
 
   const handleBarcodeScanned = (barcode: string) => {
-    const product = products.find(p => p.barcode === barcode)
+    const product = products.find((p) => p.barcode === barcode);
     if (product) {
-      setValue("productId", product.id.toString(), { shouldDirty: true, shouldTouch: true, shouldValidate: true })
-      setSelectedProduct(product)
-      setShowScanner(false)
-      toast.success(`محصول پیدا شد: ${product.name}`)
+      setValue("productId", product.id.toString(), {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      });
+      setSelectedProduct(product);
+      setShowScanner(false);
+      toast.success(`محصول پیدا شد: ${product.name}`);
     } else {
-      toast.error("محصولی با این بارکد یافت نشد")
+      toast.error("محصولی با این بارکد یافت نشد");
     }
-  }
+  };
 
   const onSubmit = async (data: StockOutFormData) => {
-    if (!selectedProduct) return
+    if (!selectedProduct) return;
 
-    const requestedQty = parseFloat(data.quantity)
+    const requestedQty = parseFloat(data.quantity);
     if (requestedQty > Number(selectedProduct.currentStock)) {
-      toast.error("موجودی کافی نیست")
-      return
+      toast.error("موجودی کافی نیست");
+      return;
     }
 
-    setIsLoading(true)
+    setIsLoading(true);
 
     try {
-      const response = await fetch('/api/stock-out', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/stock-out", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
           productId: data.productId,
-          quantity: requestedQty
-        })
-      })
+          quantity: requestedQty,
+        }),
+      });
 
       if (response.ok) {
-        toast.success("خروج کالا با موفقیت ثبت شد")
-        reset()
-        setSelectedProduct(null)
-        router.refresh()
+        toast.success("خروج کالا با موفقیت ثبت شد");
+        reset();
+        setSelectedProduct(null);
+        router.refresh();
       } else {
-        const error = await response.json()
-        toast.error(error.error || "خطا در ثبت خروج کالا")
+        const error = await response.json();
+        toast.error(error.error || "خطا در ثبت خروج کالا");
       }
     } catch (error) {
-      toast.error("خطا در ثبت خروج کالا")
+      toast.error("خطا در ثبت خروج کالا");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
-
+  };
 
   return (
     <Card>
@@ -157,28 +167,41 @@ export function StockOutForm({ products }: StockOutFormProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="space-y-4 pb-24 md:pb-0"
+        >
           <div className="space-y-2">
             <Label>محصول *</Label>
             <div className="flex gap-2">
               <Select
                 onValueChange={(value) => {
-                  setValue("productId", value, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
-                  const product = products.find(p => p.id.toString() === value)
-                  setSelectedProduct(product || null)
+                  setValue("productId", value, {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: true,
+                  });
+                  const product = products.find(
+                    (p) => p.id.toString() === value,
+                  );
+                  setSelectedProduct(product || null);
                 }}
                 value={selectedProduct?.id.toString()}
               >
                 <SelectTrigger
                   aria-label="انتخاب محصول"
-                  className={cn(errors.productId && "border-destructive focus-visible:ring-destructive")}
+                  className={cn(
+                    errors.productId &&
+                      "border-destructive focus-visible:ring-destructive",
+                  )}
                 >
                   <SelectValue placeholder="محصول را انتخاب کنید" />
                 </SelectTrigger>
                 <SelectContent>
                   {products.map((product) => (
                     <SelectItem key={product.id} value={product.id.toString()}>
-                      {product.name} ({Number(product.currentStock).toFixed(2)} {product.unit})
+                      {product.name} ({Number(product.currentStock).toFixed(2)}{" "}
+                      {product.unit})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -187,27 +210,41 @@ export function StockOutForm({ products }: StockOutFormProps) {
                 type="button"
                 variant="outline"
                 size="icon"
+                className="size-11 shrink-0"
                 onClick={() => setShowScanner(!showScanner)}
-                aria-label={showScanner ? "بستن اسکنر بارکد" : "باز کردن اسکنر بارکد"}
+                aria-label={
+                  showScanner ? "بستن اسکنر بارکد" : "باز کردن اسکنر بارکد"
+                }
               >
                 <Scan className="size-4" />
               </Button>
             </div>
             {errors.productId && (
-              <p className="text-sm text-destructive">{errors.productId.message}</p>
+              <p className="text-sm text-destructive">
+                {errors.productId.message}
+              </p>
             )}
           </div>
 
           {showScanner && (
-            <BarcodeScanner onScan={handleBarcodeScanned} onStatusChange={setScannerStatus} />
+            <BarcodeScanner
+              onScan={handleBarcodeScanned}
+              onStatusChange={setScannerStatus}
+            />
           )}
 
           {showScanner && (
-            <p className="text-xs text-center text-muted-foreground" role="status" aria-live="polite">
+            <p
+              className="text-xs text-center text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
               {scannerStatus === "scanning" && "در حال اسکن..."}
               {scannerStatus === "success" && "بارکد با موفقیت خوانده شد."}
-              {scannerStatus === "error" && "اسکنر در دسترس نیست؛ دسترسی دوربین را بررسی کنید."}
-              {scannerStatus === "idle" && "برای اسکن بارکد، دوربین را فعال کنید."}
+              {scannerStatus === "error" &&
+                "اسکنر در دسترس نیست؛ دسترسی دوربین را بررسی کنید."}
+              {scannerStatus === "idle" &&
+                "برای اسکن بارکد، دوربین را فعال کنید."}
             </p>
           )}
 
@@ -216,13 +253,16 @@ export function StockOutForm({ products }: StockOutFormProps) {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">موجودی فعلی:</span>
                 <Badge>
-                  {Number(selectedProduct.currentStock).toFixed(2)} {selectedProduct.unit}
+                  {Number(selectedProduct.currentStock).toFixed(2)}{" "}
+                  {selectedProduct.unit}
                 </Badge>
               </div>
               {willBeLowStock && (
                 <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
                   <AlertTriangle className="size-4" />
-                  <span className="text-xs">هشدار: موجودی به سطح بحرانی می‌رسد</span>
+                  <span className="text-xs">
+                    هشدار: موجودی به سطح بحرانی می‌رسد
+                  </span>
                 </div>
               )}
             </div>
@@ -237,17 +277,24 @@ export function StockOutForm({ products }: StockOutFormProps) {
               {...register("quantity")}
               disabled={isLoading || !selectedProduct}
               dir="ltr"
-              placeholder={selectedProduct ? `به ${selectedProduct.unit}` : "مقدار"}
+              placeholder={
+                selectedProduct ? `به ${selectedProduct.unit}` : "مقدار"
+              }
               aria-invalid={!!errors.quantity || isOverWithdrawal}
-              className={cn((errors.quantity || isOverWithdrawal) && "border-destructive focus-visible:ring-destructive")}
+              className={cn(
+                (errors.quantity || isOverWithdrawal) &&
+                  "border-destructive focus-visible:ring-destructive",
+              )}
             />
             {errors.quantity && (
-              <p className="text-sm text-destructive">{errors.quantity.message}</p>
+              <p className="text-sm text-destructive">
+                {errors.quantity.message}
+              </p>
             )}
             {isOverWithdrawal && (
               <p className="text-sm text-destructive">
-                مقدار خروج از موجودی فعلی بیشتر است. مقدار را کمتر از {Number(selectedProduct?.currentStock).toFixed(2)}
-                {" "}
+                مقدار خروج از موجودی فعلی بیشتر است. مقدار را کمتر از{" "}
+                {Number(selectedProduct?.currentStock).toFixed(2)}{" "}
                 {selectedProduct?.unit} وارد کنید.
               </p>
             )}
@@ -292,12 +339,31 @@ export function StockOutForm({ products }: StockOutFormProps) {
             />
           </div>
 
-          <Button type="submit" disabled={isSubmitDisabled} className="w-full" aria-busy={isLoading}>
-            {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
-            ثبت خروج کالا
-          </Button>
+          <div className="hidden md:block">
+            <Button
+              type="submit"
+              disabled={isSubmitDisabled}
+              className="w-full"
+              aria-busy={isLoading}
+            >
+              {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
+              ثبت خروج کالا
+            </Button>
+          </div>
+
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 backdrop-blur md:hidden">
+            <Button
+              type="submit"
+              disabled={isSubmitDisabled}
+              className="w-full"
+              aria-busy={isLoading}
+            >
+              {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
+              ثبت خروج کالا
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>
-  )
+  );
 }
