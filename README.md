@@ -87,3 +87,25 @@ Authorization: Bearer YOUR_API_SECRET_KEY
 - shadcn/ui components
 - Recharts for data visualization
 - html5-qrcode for scanning
+
+## Docker
+
+Build and run locally:
+
+```bash
+docker build -t warehouse-app .
+docker run --rm -p 3000:3000 --env-file .env warehouse-app
+```
+
+### GitHub Actions Docker publish
+
+A workflow is included at `.github/workflows/docker-build-push.yml` to build and push images to GHCR on:
+- Pushes to `main`
+- Version tags like `v1.0.0`
+- Manual dispatch
+
+Published image path:
+
+```text
+ghcr.io/<owner>/<repo>
+```
