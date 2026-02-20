@@ -49,11 +49,11 @@ export function LowStockAlert({ products }: LowStockAlertProps) {
               {products.map((product) => (
                 <div
                   key={product.id}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                  className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3"
                 >
                   <div className="flex-1">
                     <p className="font-medium">{product.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="mt-1 flex items-center gap-2">
                       <Badge variant="destructive" className="text-xs">
                         {Number(product.currentStock).toFixed(2)} {product.unit}
                       </Badge>
@@ -62,6 +62,10 @@ export function LowStockAlert({ products }: LowStockAlertProps) {
                       </span>
                     </div>
                   </div>
+
+                  <Link href={`/dashboard/stock-in?productId=${product.id}`}>
+                    <Button size="sm">سفارش سریع</Button>
+                  </Link>
                 </div>
               ))}
             </div>
