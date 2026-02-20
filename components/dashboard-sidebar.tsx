@@ -54,13 +54,15 @@ const navItems = [
 
 interface DashboardSidebarProps {
   user: any
+  className?: string
+  onNavigate?: () => void
 }
 
-export function DashboardSidebar({ user }: DashboardSidebarProps) {
+export function DashboardSidebar({ user, className, onNavigate }: DashboardSidebarProps) {
   const pathname = usePathname()
 
   return (
-    <aside className="flex flex-col w-64 border-l bg-card">
+    <aside className={cn("flex flex-col w-64 border-l bg-card", className)}>
       <div className="flex items-center gap-3 p-6 border-b">
         <div className="flex items-center justify-center size-10 rounded-lg bg-primary text-primary-foreground">
           <Warehouse className="size-5" />
@@ -81,12 +83,14 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 isActive
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
+              aria-current={isActive ? "page" : undefined}
             >
               <Icon className="size-5 shrink-0" />
               <span>{item.title}</span>
