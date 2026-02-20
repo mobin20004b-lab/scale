@@ -97,6 +97,16 @@ docker build -t warehouse-app .
 docker run --rm -p 3000:3000 --env-file .env warehouse-app
 ```
 
+Or run the app and a local PostgreSQL database together with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+The compose file maps:
+- App: `http://localhost:3000`
+- Postgres: `localhost:5432` (`postgres/postgres`, database `warehouse`)
+
 ### GitHub Actions Docker publish
 
 A workflow is included at `.github/workflows/docker-build-push.yml` to build and push images to Docker Hub on:
