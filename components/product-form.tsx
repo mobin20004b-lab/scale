@@ -91,7 +91,7 @@ export function ProductForm({ product }: ProductFormProps) {
         <CardTitle>اطلاعات محصول</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" aria-busy={isLoading}>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="name">نام محصول *</Label>
@@ -179,7 +179,7 @@ export function ProductForm({ product }: ProductFormProps) {
           </div>
 
           <div className="flex gap-3">
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading} aria-busy={isLoading}>
               {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
               {product ? "ذخیره تغییرات" : "ثبت محصول"}
             </Button>

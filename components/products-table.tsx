@@ -288,7 +288,7 @@ export function ProductsTable({
                   </TableCell>
                   <TableCell>{product.unit}</TableCell>
                   <TableCell>
-                    {isLowStock(product) ? "کم‌موجودی" : "عادی"}
+                    <span className={isLowStock(product) ? "text-amber-700 dark:text-amber-300 font-medium" : "text-emerald-700 dark:text-emerald-300 font-medium"}>{isLowStock(product) ? "کم‌موجودی" : "عادی"}</span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-center gap-2">
@@ -379,7 +379,7 @@ export function ProductsTable({
             </div>
           ) : (
             paginatedProducts.map((product) => (
-              <div key={product.id} className="rounded-lg border p-4 space-y-3">
+              <div key={product.id} className="rounded-lg border p-4 space-y-3 transition-colors hover:bg-muted/40">
                 <div className="flex items-start justify-between gap-2">
                   <div className="font-semibold flex items-center gap-2">
                     {product.name}
@@ -409,7 +409,7 @@ export function ProductsTable({
                     )}
                   </span>
                   <span className="text-muted-foreground">وضعیت</span>
-                  <span>{isLowStock(product) ? "کم‌موجودی" : "عادی"}</span>
+                  <span><span className={isLowStock(product) ? "text-amber-700 dark:text-amber-300 font-medium" : "text-emerald-700 dark:text-emerald-300 font-medium"}>{isLowStock(product) ? "کم‌موجودی" : "عادی"}</span></span>
                 </div>
                 <div className="flex items-center justify-end gap-2 pt-1 border-t">
                   <Link href={`/dashboard/products/${product.id}/edit`}>

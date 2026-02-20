@@ -62,6 +62,7 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("")
   const [selectedScaleId, setSelectedScaleId] = useState<string>("")
   const [liveWeight, setLiveWeight] = useState<number | null>(null)
+  const [scannerStatus, setScannerStatus] = useState<"idle" | "scanning" | "success" | "error">("idle")
 
   const {
     register,
@@ -164,7 +165,7 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
                 setSelectedScaleId("")
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger aria-label="انتخاب انبار">
                 <SelectValue placeholder="انتخاب انبار" />
               </SelectTrigger>
               <SelectContent>
@@ -180,7 +181,7 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
           <div className="space-y-2">
             <Label>ترازو</Label>
             <Select value={selectedScaleId} onValueChange={setSelectedScaleId} disabled={!selectedWarehouseId}>
-              <SelectTrigger>
+              <SelectTrigger aria-label="انتخاب ترازو">
                 <SelectValue placeholder="انتخاب ترازو" />
               </SelectTrigger>
               <SelectContent>
@@ -224,7 +225,7 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
                 }}
                 value={selectedProduct?.id.toString()}
               >
-                <SelectTrigger>
+                <SelectTrigger aria-label="انتخاب محصول">
                   <SelectValue placeholder="محصول را انتخاب کنید" />
                 </SelectTrigger>
                 <SelectContent>
@@ -240,6 +241,7 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
                 variant="outline"
                 size="icon"
                 onClick={() => setShowScanner(!showScanner)}
+                aria-label={showScanner ? "بستن اسکنر بارکد" : "باز کردن اسکنر بارکد"}
               >
                 <Scan className="size-4" />
               </Button>
@@ -249,7 +251,20 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
             )}
           </div>
 
-          {showScanner && <BarcodeScanner onScan={handleBarcodeScanned} />}
+          {showScanner && <BarcodeScanner onScan={handleBarcodeScanned} onStatusChange={setScannerStatus} />}
+
+          {showScanner && (
+            <p
+              className="text-xs text-center text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              {scannerStatus === "scanning" && "در حال اسکن..."}
+              {scannerStatus === "success" && "بارکد با موفقیت خوانده شد."}
+              {scannerStatus === "error" && "اسکنر در دسترس نیست؛ دسترسی دوربین را بررسی کنید."}
+              {scannerStatus === "idle" && "برای اسکن بارکد، دوربین را فعال کنید."}
+            </p>
+          )}
 
           {selectedProduct && (
             <div className="p-3 rounded-lg bg-muted">
@@ -297,7 +312,7 @@ export function StockInForm({ products, warehouses, scales }: StockInFormProps) 
             />
           </div>
 
-          <Button type="submit" disabled={isLoading} className="w-full">
+          <Button type="submit" disabled={isLoading} className="w-full" aria-busy={isLoading}>
             {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
             ثبت ورود کالا
           </Button>
