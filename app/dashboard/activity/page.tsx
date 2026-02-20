@@ -2,8 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { History } from "lucide-react"
-import { format } from "date-fns"
-import { faIR } from "date-fns/locale"
+import { DateTimeText } from "@/components/date-time-text"
 
 export default async function ActivityPage() {
   const activities = await prisma.activity.findMany({
@@ -71,9 +70,7 @@ export default async function ActivityPage() {
                     )}
                     
                     <p className="text-xs text-muted-foreground">
-                      {format(new Date(activity.created_at), 'yyyy/MM/dd - HH:mm:ss', { 
-                        locale: faIR 
-                      })}
+                      <DateTimeText value={activity.createdAt} mode="relative" showTimeZone />
                     </p>
                   </div>
                 </div>

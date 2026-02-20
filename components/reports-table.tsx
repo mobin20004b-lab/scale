@@ -11,8 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
-import { faIR } from "date-fns/locale";
+import { DateTimeText } from "@/components/date-time-text";
 import { FileText, FilterX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -195,9 +194,7 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
                 paginatedTransactions.map((transaction) => (
                   <TableRow key={transaction.id}>
                     <TableCell className="sticky left-0 z-10 bg-background">
-                      {format(transaction.date, "yyyy/MM/dd HH:mm", {
-                        locale: faIR,
-                      })}
+                      <DateTimeText value={transaction.date} showTimeZone />
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -267,9 +264,7 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
                   <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                     <span className="text-muted-foreground">تاریخ</span>
                     <span>
-                      {format(transaction.date, "yyyy/MM/dd HH:mm", {
-                        locale: faIR,
-                      })}
+                      <DateTimeText value={transaction.date} showTimeZone />
                     </span>
                     <span className="text-muted-foreground">مقدار</span>
                     <span>

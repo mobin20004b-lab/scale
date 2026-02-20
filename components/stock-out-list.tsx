@@ -2,8 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { History } from "lucide-react"
-import { format } from "date-fns"
-import { faIR } from "date-fns/locale"
+import { DateTimeText } from "@/components/date-time-text"
 
 interface StockOut {
   id: string
@@ -72,7 +71,7 @@ export function StockOutList({ stockOuts }: StockOutListProps) {
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
                     <span>{stockOut.user.full_name}</span>
                     <span>
-                      {format(new Date(stockOut.createdAt), 'yyyy/MM/dd HH:mm', { locale: faIR })}
+                      <DateTimeText value={stockOut.createdAt} showTimeZone />
                     </span>
                   </div>
                 </div>

@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
+import { DateTimeText } from "@/components/date-time-text"
 
 interface DashboardHeaderProps {
   user: any
@@ -39,11 +40,7 @@ export function DashboardHeader({ user, onOpenMobileNav }: DashboardHeaderProps)
           خوش آمدید، {user?.name}
         </h1>
         <Badge variant="secondary" className="text-xs hidden sm:inline-flex">
-          {new Date().toLocaleDateString("fa-IR", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
+          <DateTimeText value={new Date()} />
         </Badge>
       </div>
 
