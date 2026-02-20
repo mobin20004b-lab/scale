@@ -4,9 +4,11 @@ import bcrypt from "bcryptjs"
 const prisma = new PrismaClient()
 
 async function main() {
+  console.log("Seeding database...")
   const password = process.env.ADMIN_PASSWORD || "admin123"
   const hashedPassword = await bcrypt.hash(password, 10)
 
+  // Upsert the admin user using username and full_name as per schema
   const admin = await prisma.user.upsert({
     where: { username: "admin" },
     update: {},
