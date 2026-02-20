@@ -9,10 +9,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+} from "@/components/ui/table"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -486,4 +488,29 @@ export function ProductsTable({
       )}
     </div>
   );
+}
+
+
+export function ProductsTableSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3">
+        <Skeleton className="h-10 flex-1 min-w-[260px]" />
+        <Skeleton className="h-10 w-[200px]" />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-9 w-32" />
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="space-y-3 p-4">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
+        </div>
+      </Card>
+    </div>
+  )
 }
