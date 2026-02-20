@@ -17,8 +17,9 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { formatPersianDate } from "@/lib/date-time"
-import { CalendarIcon, Download } from "lucide-react"
+import { CalendarIcon, Download, Loader2, RefreshCcw, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 
 interface Product {
   id: string
@@ -99,6 +100,8 @@ export function ReportsFilters({
   const [endDate, setEndDate] = useState(initialEndDate)
   const [productId, setProductId] = useState(initialProductId || "all")
   const [type, setType] = useState(initialType)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const applyFilters = () => {
     const params = new URLSearchParams()
@@ -120,6 +123,9 @@ export function ReportsFilters({
   }, [startDate, endDate, productId, type])
 
   const handleExport = async () => {
+    setExportError(null)
+    setIsExporting(true)
+
     try {
       const params = new URLSearchParams()
       if (startDate) params.set("startDate", startDate)
@@ -141,10 +147,13 @@ export function ReportsFilters({
         document.body.removeChild(a)
         toast.success("گزارش با موفقیت دانلود شد")
       } else {
-        toast.error("خطا در دانلود گزارش")
+        throw new Error("دانلود گزارش انجام نشد")
       }
     } catch {
+      setExportError("خطا در دانلود گزارش. اتصال شبکه یا فیلترها را بررسی کنید.")
       toast.error("خطا در دانلود گزارش")
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -188,12 +197,40 @@ export function ReportsFilters({
           </div>
 
           <div className="flex items-end gap-2">
-            <Button onClick={handleExport} variant="outline" className="w-full">
-              <Download className="size-4 ml-2" />
+            <Button
+              onClick={handleExport}
+              variant="outline"
+              className="w-full"
+              disabled={isExporting}
+              aria-busy={isExporting}
+            >
+              {isExporting ? (
+                <Loader2 className="size-4 ml-2 animate-spin" />
+              ) : (
+                <Download className="size-4 ml-2" />
+              )}
               دانلود
             </Button>
           </div>
         </div>
+
+        {exportError && (
+          <Empty className="mt-4 border border-destructive/40 bg-destructive/5 p-4 md:p-5">
+            <EmptyHeader className="max-w-full">
+              <EmptyMedia variant="icon" className="bg-destructive/10 text-destructive">
+                <TriangleAlert className="size-5" />
+              </EmptyMedia>
+              <EmptyTitle className="text-base">دانلود گزارش با خطا مواجه شد</EmptyTitle>
+              <EmptyDescription>{exportError}</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button type="button" variant="outline" onClick={handleExport} className="w-full sm:w-auto">
+                <RefreshCcw className="size-4 ml-2" />
+                تلاش مجدد دانلود
+              </Button>
+            </EmptyContent>
+          </Empty>
+        )}
       </CardContent>
     </Card>
   )
