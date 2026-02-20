@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +20,7 @@ import { Loader2, RefreshCcw, Scan, Plus, TriangleAlert } from "lucide-react";
 import { BarcodeScanner } from "./barcode-scanner";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { stockInFormSchema } from "@/lib/schemas/inventory";
 import { formatScaleWeight } from "@/lib/scale-reading";
 import {
   Empty,
@@ -31,19 +31,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 
-const stockInSchema = z.object({
-  productId: z.string().min(1, "محصول را انتخاب کنید"),
-  quantity: z
-    .string()
-    .refine((value) => value.trim().length > 0, "مقدار را وارد کنید")
-    .refine((value) => !Number.isNaN(Number(value)), "مقدار باید عددی باشد")
-    .refine((value) => Number(value) > 0, "مقدار باید بیشتر از صفر باشد"),
-  supplier: z.string().optional(),
-  invoiceNumber: z.string().optional(),
-  notes: z.string().optional(),
-});
-
-type StockInFormData = z.infer<typeof stockInSchema>;
+type StockInFormData = import("zod").infer<typeof stockInFormSchema>;
 
 interface Product {
   id: string;
@@ -100,7 +88,7 @@ export function StockInForm({
     reset,
     watch,
   } = useForm<StockInFormData>({
-    resolver: zodResolver(stockInSchema),
+    resolver: zodResolver(stockInFormSchema),
     mode: "onChange",
     defaultValues: {
       productId: "",

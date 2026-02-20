@@ -1,58 +1,51 @@
-import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { ZodError } from "zod";
+import { validationErrorResponse } from "@/lib/api-validation";
+import { stockInPayloadSchema } from "@/lib/schemas/inventory";
 
 export async function POST(request: Request) {
   try {
-    const session = await auth()
+    const session = await auth();
     if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json()
-    const { productId, quantity, supplier, invoiceNumber, notes, warehouseId, scaleId, scaleWeight } = body
-
-    if (!productId || !quantity || quantity <= 0) {
-      return NextResponse.json(
-        { error: "Missing or invalid required fields" },
-        { status: 400 }
-      )
-    }
-
-    const parsedQuantity = parseFloat(String(quantity))
+    const parsed = stockInPayloadSchema.parse(await request.json());
 
     const product = await prisma.product.findUnique({
-      where: { id: productId }
-    })
+      where: { id: parsed.productId },
+    });
 
     if (!product) {
-      return NextResponse.json({ error: "Product not found" }, { status: 404 })
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
     const stockIn = await prisma.$transaction(async (tx) => {
       const createdStockIn = await tx.stockIn.create({
         data: {
-          productId,
+          productId: parsed.productId,
           userId: (session.user as any).id,
-          quantity: parsedQuantity,
-          weight: parsedQuantity,
-          supplier: supplier || null,
-          invoiceNumber: invoiceNumber || null,
-          notes: notes || null,
-          warehouseId: warehouseId || null,
-          scaleId: scaleId || null,
-          scaleWeight: scaleWeight !== undefined && scaleWeight !== null ? Number(scaleWeight) : null,
-        }
-      })
+          quantity: parsed.quantity,
+          weight: parsed.quantity,
+          supplier: parsed.supplier,
+          invoiceNumber: parsed.invoiceNumber,
+          notes: parsed.notes,
+          warehouseId: parsed.warehouseId || null,
+          scaleId: parsed.scaleId || null,
+          scaleWeight: parsed.scaleWeight,
+        },
+      });
 
       await tx.product.update({
-        where: { id: productId },
+        where: { id: parsed.productId },
         data: {
           currentStock: {
-            increment: parsedQuantity
-          }
-        }
-      })
+            increment: parsed.quantity,
+          },
+        },
+      });
 
       await tx.activity.create({
         data: {
@@ -60,19 +53,20 @@ export async function POST(request: Request) {
           action: "ورود کالا",
           entity: "StockIn",
           entityId: createdStockIn.id,
-          details: `${parsedQuantity} ${product.unit} از "${product.name}" به انبار اضافه شد`
-        }
-      })
+          details: `${parsed.quantity} ${product.unit} از "${product.name}" به انبار اضافه شد`,
+        },
+      });
 
-      return createdStockIn
-    })
+      return createdStockIn;
+    });
 
-    return NextResponse.json(stockIn, { status: 201 })
+    return NextResponse.json(stockIn, { status: 201 });
   } catch (error) {
-    console.error('[v0] Error creating stock in:', error)
-    return NextResponse.json(
-      { error: "Failed to create stock in" },
-      { status: 500 }
-    )
+    if (error instanceof ZodError) {
+      return validationErrorResponse(error);
+    }
+
+    console.error("[v0] Error creating stock in:", error);
+    return NextResponse.json({ error: "Failed to create stock in" }, { status: 500 });
   }
 }
