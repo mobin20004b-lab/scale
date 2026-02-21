@@ -29,8 +29,7 @@ import {
   Check,
   Copy,
   Edit,
-  Eye,
-  EyeOff,
+  KeyRound,
   Plus,
   RefreshCw,
   Trash2,
@@ -68,7 +67,7 @@ interface Warehouse {
 interface Scale {
   id: string;
   name: string;
-  apiKey: string;
+  apiKeyLast4: string;
   warehouseId: string;
   warehouse: Warehouse;
   tare: number;
@@ -112,7 +111,12 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [healthFilter, setHealthFilter] = useState("all");
-  const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
+  const [reauthPassword, setReauthPassword] = useState("");
+  const [reauthInProgress, setReauthInProgress] = useState(false);
+  const [reauthVerifiedAt, setReauthVerifiedAt] = useState<number | null>(null);
+  const [copyConfirmScale, setCopyConfirmScale] = useState<Scale | null>(null);
+  const [rotateConfirmScale, setRotateConfirmScale] = useState<Scale | null>(null);
+  const [rotatedTokenData, setRotatedTokenData] = useState<{ scaleId: string; token: string } | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [localScales, setLocalScales] = useState(scales);
   const [selectedScaleIds, setSelectedScaleIds] = useState<string[]>([]);
@@ -394,19 +398,95 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     router.refresh();
   };
 
-  const copyScaleToken = async (apiKey: string) => {
+  const ensureRecentReauth = async () => {
+    if (reauthVerifiedAt && Date.now() - reauthVerifiedAt < 5 * 60 * 1000) {
+      return true;
+    }
+
+    if (!reauthPassword.trim()) {
+      toast.error("برای این عملیات، رمز عبور را وارد کنید");
+      return false;
+    }
+
+    setReauthInProgress(true);
+    try {
+      const response = await fetch("/api/auth/reauth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: reauthPassword }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "تأیید مجدد ناموفق بود");
+      }
+
+      setReauthVerifiedAt(Date.now());
+      toast.success("تأیید مجدد انجام شد");
+      return true;
+    } catch (error: any) {
+      toast.error(error.message || "تأیید مجدد ناموفق بود");
+      return false;
+    } finally {
+      setReauthInProgress(false);
+    }
+  };
+
+  const copyScaleToken = async (scale: Scale) => {
+    const isConfirmed = window.confirm(
+      `کپی توکن ترازو «${scale.name}» یک عملیات حساس است. ادامه می‌دهید؟`
+    );
+    if (!isConfirmed) return;
+
+    const canProceed = await ensureRecentReauth();
+    if (!canProceed) return;
 
     try {
-      await navigator.clipboard.writeText(apiKey);
-      setCopiedToken(apiKey);
+      const response = await fetch(`/api/scales/${scale.id}/token/copy`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "دریافت توکن ناموفق بود");
+      }
+
+      const payload = await response.json();
+      await navigator.clipboard.writeText(payload.token);
+      setCopiedToken(scale.id);
       toast.success("توکن ترازو کپی شد");
       setTimeout(
         () =>
-          setCopiedToken((previous) => (previous === apiKey ? null : previous)),
+          setCopiedToken((previous) => (previous === scale.id ? null : previous)),
         1200
       );
-    } catch {
-      toast.error("کپی توکن ناموفق بود");
+    } catch (error: any) {
+      toast.error(error.message || "کپی توکن ناموفق بود");
+    }
+  };
+
+  const rotateScaleToken = async (scale: Scale) => {
+    const isConfirmed = window.confirm(
+      `توکن قبلی ترازو «${scale.name}» بعد از چرخش غیرقابل استفاده می‌شود. ادامه می‌دهید؟`
+    );
+    if (!isConfirmed) return;
+
+    const canProceed = await ensureRecentReauth();
+    if (!canProceed) return;
+
+    try {
+      const response = await fetch(`/api/scales/${scale.id}/token/rotate`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "چرخش توکن ناموفق بود");
+      }
+
+      const payload = await response.json();
+      setRotatedTokenData({ scaleId: scale.id, token: payload.token });
+      toast.success("توکن جدید ایجاد شد");
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error.message || "چرخش توکن ناموفق بود");
     }
   };
 
@@ -673,10 +753,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                       انبار: {scale.warehouse.name}
                     </div>
                     <div className="text-xs text-muted-foreground font-mono break-all">
-                      توکن:{" "}
-                      {showTokens[scale.id]
-                        ? scale.apiKey
-                        : `••••••••${scale.apiKey.slice(-6)}`}
+                      توکن: {`••••••••${scale.apiKeyLast4}`}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       شناسه ترازو: {scale.id}
@@ -712,25 +789,9 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() =>
-                      setShowTokens((previous) => ({
-                        ...previous,
-                        [scale.id]: !previous[scale.id],
-                      }))
-                    }
+                    onClick={() => setCopyConfirmScale(scale)}
                   >
-                    {showTokens[scale.id] ? (
-                      <EyeOff className="size-4" />
-                    ) : (
-                      <Eye className="size-4" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => copyScaleToken(scale.apiKey)}
-                  >
-                    {copiedToken === scale.apiKey ? (
+                    {copiedToken === scale.id ? (
                       <Check className="size-4" />
                     ) : (
                       <Copy className="size-4" />
@@ -739,15 +800,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() =>
-                      navigator.clipboard.writeText(
-                        JSON.stringify(
-                          { scaleId: scale.id, token: scale.apiKey },
-                          null,
-                          2
-                        )
-                      )
-                    }
+                    onClick={() => setRotateConfirmScale(scale)}
                   >
                     <RefreshCw className="size-4" />
                   </Button>
@@ -911,6 +964,77 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           </Empty>
         )}
       </CardContent>
+
+      <Dialog open={Boolean(copyConfirmScale)} onOpenChange={(openState) => !openState && setCopyConfirmScale(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>کپی توکن ترازو (حساس)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>این عملیات در Activity ثبت می‌شود. برای ادامه، رمز عبور فعلی خود را وارد کنید.</p>
+            <Input type="password" value={reauthPassword} onChange={(event) => setReauthPassword(event.target.value)} placeholder="رمز عبور" />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setCopyConfirmScale(null)}>انصراف</Button>
+              <Button disabled={reauthInProgress || !copyConfirmScale} onClick={async () => {
+                if (!copyConfirmScale) return;
+                await copyScaleToken(copyConfirmScale);
+                setCopyConfirmScale(null);
+              }}>
+                <KeyRound className="size-4 ml-2" />
+                ادامه و کپی توکن
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(rotateConfirmScale)} onOpenChange={(openState) => !openState && setRotateConfirmScale(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>چرخش توکن ترازو</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>پس از چرخش، توکن قبلی بلافاصله نامعتبر می‌شود. این عملیات در Activity ثبت می‌شود.</p>
+            <Input type="password" value={reauthPassword} onChange={(event) => setReauthPassword(event.target.value)} placeholder="رمز عبور" />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRotateConfirmScale(null)}>انصراف</Button>
+              <Button disabled={reauthInProgress || !rotateConfirmScale} onClick={async () => {
+                if (!rotateConfirmScale) return;
+                await rotateScaleToken(rotateConfirmScale);
+                setRotateConfirmScale(null);
+              }}>
+                <RefreshCw className="size-4 ml-2" />
+                چرخش توکن
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(rotatedTokenData)} onOpenChange={(openState) => !openState && setRotatedTokenData(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>توکن جدید (نمایش یک‌باره)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">این مقدار فقط یک‌بار نمایش داده می‌شود. آن را در جای امن نگه‌داری کنید.</p>
+            <div className="rounded-md border p-2 font-mono text-xs break-all">
+              {rotatedTokenData?.token}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRotatedTokenData(null)}>بستن</Button>
+              <Button onClick={async () => {
+                if (!rotatedTokenData) return;
+                await navigator.clipboard.writeText(rotatedTokenData.token);
+                toast.success("توکن جدید کپی شد");
+              }}>
+                <Copy className="size-4 ml-2" />
+                کپی توکن جدید
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
