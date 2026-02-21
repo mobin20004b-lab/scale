@@ -114,6 +114,9 @@ export function StockInForm({
   const [manualMode, setManualMode] = useState(false);
   const [manualReason, setManualReason] = useState("");
   const [playAudioFeedback, setPlayAudioFeedback] = useState(false);
+  const [autoPrintLabel, setAutoPrintLabel] = useState(false);
+  const [labelSize, setLabelSize] = useState<"50x30" | "60x40">("50x30");
+  const [lastStockInId, setLastStockInId] = useState<string | null>(null);
   const [capturedAt, setCapturedAt] = useState<string | null>(null);
   const [captureSource, setCaptureSource] = useState<"current" | "stable-average" | "auto" | "locked" | "manual" | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -394,8 +397,15 @@ export function StockInForm({
       });
 
       if (response.ok) {
+        const created = (await response.json()) as { id: string };
         setSaveState("saved");
         toast.success("Saved", { id: toastId, duration: 5000 });
+        setLastStockInId(created.id);
+
+        if (autoPrintLabel && created.id) {
+          await handlePrintLabels([created.id]);
+        }
+
         reset();
         setSelectedProduct(null);
         setSelectedWarehouseId("");
@@ -419,6 +429,29 @@ export function StockInForm({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handlePrintLabels = async (stockInIds: string[]) => {
+    const response = await fetch("/api/labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "stock-in", stockInIds, size: labelSize }),
+    });
+
+    if (!response.ok) {
+      throw new Error("print failed");
+    }
+
+    const data = (await response.json()) as { html: string };
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=960,height=700");
+    if (!printWindow) {
+      throw new Error("print window blocked");
+    }
+
+    printWindow.document.write(data.html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   };
 
   if (products.length === 0) {
@@ -677,6 +710,32 @@ export function StockInForm({
                 onCheckedChange={(checked) => setPlayAudioFeedback(Boolean(checked))}
               />
               <Label htmlFor="audio-feedback" className="text-xs flex items-center gap-1"><Volume2 className="size-3" />بازخورد صوتی در کپچر/ثبت</Label>
+            </div>
+
+            <div className="space-y-2 rounded-md border p-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="auto-print" className="text-xs">چاپ خودکار لیبل پس از ثبت پایدار</Label>
+                <Switch id="auto-print" checked={autoPrintLabel} onCheckedChange={setAutoPrintLabel} />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs">اندازه لیبل</Label>
+                <Select value={labelSize} onValueChange={(value) => setLabelSize(value as "50x30" | "60x40") }>
+                  <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="50x30">50x30</SelectItem>
+                    <SelectItem value="60x40">60x40</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!lastStockInId}
+                  onClick={() => lastStockInId && handlePrintLabels([lastStockInId])}
+                >
+                  چاپ تگ آخرین ورود
+                </Button>
+              </div>
             </div>
           </div>
 

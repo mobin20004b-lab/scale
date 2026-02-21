@@ -224,10 +224,37 @@ enum BarcodeSymbology {
   UNKNOWN
 }
 
+
+enum PrintJobStatus {
+  QUEUED
+  SENT
+  FAILED
+  REPRINT
+}
+
 enum UnknownBarcodeStatus {
   OPEN
   TEMP_RECEIVING
   MAPPED
+}
+
+
+model PrintJob {
+  id              String   @id @default(cuid())
+  stockInId       String?
+  userId          String
+  templateVersion String
+  labelSize       String
+  status          PrintJobStatus @default(QUEUED)
+  payload         Json
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+  sentAt          DateTime?
+  failedAt        DateTime?
+
+  @@index([status, createdAt])
+  @@index([stockInId])
+  @@map("print_jobs")
 }
 
 model IdempotencyRecord {

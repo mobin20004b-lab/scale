@@ -14,6 +14,10 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if ((session.user as any).role !== "ADMIN") {
+      return NextResponse.json({ error: "Supervisor permission required" }, { status: 403 });
+    }
+
     const { id } = await params;
 
     const stockOut = await prisma.stockOut.findUnique({
