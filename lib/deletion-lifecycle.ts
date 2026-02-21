@@ -57,7 +57,11 @@ export async function finalizeDueDeletes(entity: EntityType) {
   }
 }
 
-export async function requestDelete(entity: EntityType, id: string) {
+export async function requestDelete(
+  entity: EntityType,
+  id: string,
+  options?: { mode?: "delete" | "archive" }
+) {
   await finalizeDueDeletes(entity);
 
   const row = (await modelMap[entity].findUnique({
@@ -69,18 +73,43 @@ export async function requestDelete(entity: EntityType, id: string) {
       deleteCommitAfter: true,
       deleteConflictAt: true,
       deleteRequestedFromUpdatedAt: true,
-      ...(entity === "scale"
+      ...(entity === "scale" || entity === "warehouse"
         ? {
             _count: {
-              select: { stockIns: true },
+              select:
+                entity === "warehouse"
+                  ? { scales: true, stockIns: true, stockOuts: true }
+                  : { stockIns: true },
             },
           }
         : {}),
     },
-  })) as (DeleteRow & { _count?: { stockIns: number } }) | null;
+  })) as
+    | (DeleteRow & {
+        _count?: { stockIns?: number; scales?: number; stockOuts?: number };
+      })
+    | null;
 
   if (!row) {
     return { status: 404 as const, body: { error: "Not found" } };
+  }
+
+  if (entity === "warehouse") {
+    const scales = row._count?.scales ?? 0;
+    const transactions =
+      (row._count?.stockIns ?? 0) + (row._count?.stockOuts ?? 0);
+    const hasDependencies = scales > 0 || transactions > 0;
+
+    if (hasDependencies && options?.mode === "delete") {
+      return {
+        status: 409 as const,
+        body: {
+          error:
+            "این انبار وابستگی فعال دارد. برای جلوگیری از حذف ناخواسته، فقط آرشیو مجاز است.",
+          requiresArchive: true,
+        },
+      };
+    }
   }
 
   if (entity === "scale" && (row._count?.stockIns ?? 0) > 0) {

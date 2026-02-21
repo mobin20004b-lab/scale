@@ -1,19 +1,19 @@
-import { NextResponse } from "next/server"
-import { requireSession } from "@/lib/route-guards"
-import { prisma } from "@/lib/prisma"
-import { requestDelete } from "@/lib/deletion-lifecycle"
+import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/route-guards";
+import { prisma } from "@/lib/prisma";
+import { requestDelete } from "@/lib/deletion-lifecycle";
 
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const guard = await requireSession()
+    const guard = await requireSession();
     if ("error" in guard) {
-      return guard.error
+      return guard.error;
     }
 
-    const { id } = await context.params
+    const { id } = await context.params;
     const warehouse = await prisma.warehouse.findUnique({
       where: { id },
       include: {
@@ -21,16 +21,22 @@ export async function GET(
           select: { scales: true, stockIns: true },
         },
       },
-    })
+    });
 
     if (!warehouse) {
-      return NextResponse.json({ error: "Warehouse not found" }, { status: 404 })
+      return NextResponse.json(
+        { error: "Warehouse not found" },
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json(warehouse)
+    return NextResponse.json(warehouse);
   } catch (error) {
-    console.error("[v0] Error fetching warehouse:", error)
-    return NextResponse.json({ error: "Failed to fetch warehouse" }, { status: 500 })
+    console.error("[v0] Error fetching warehouse:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch warehouse" },
+      { status: 500 }
+    );
   }
 }
 
@@ -39,17 +45,17 @@ export async function PUT(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const guard = await requireSession({ adminOnly: true })
+    const guard = await requireSession({ adminOnly: true });
     if ("error" in guard) {
-      return guard.error
+      return guard.error;
     }
 
-    const { id } = await context.params
-    const body = await request.json()
-    const { name, location, description } = body
+    const { id } = await context.params;
+    const body = await request.json();
+    const { name, location, description } = body;
 
     if (!name?.trim()) {
-      return NextResponse.json({ error: "Name is required" }, { status: 400 })
+      return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
     const warehouse = await prisma.warehouse.update({
@@ -59,12 +65,15 @@ export async function PUT(
         location: location?.trim() || null,
         description: description?.trim() || null,
       },
-    })
+    });
 
-    return NextResponse.json(warehouse)
+    return NextResponse.json(warehouse);
   } catch (error) {
-    console.error("[v0] Error updating warehouse:", error)
-    return NextResponse.json({ error: "Failed to update warehouse" }, { status: 500 })
+    console.error("[v0] Error updating warehouse:", error);
+    return NextResponse.json(
+      { error: "Failed to update warehouse" },
+      { status: 500 }
+    );
   }
 }
 
@@ -73,17 +82,23 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const guard = await requireSession({ adminOnly: true })
+    const guard = await requireSession({ adminOnly: true });
     if ("error" in guard) {
-      return guard.error
+      return guard.error;
     }
 
-    const { id } = await context.params
-    const result = await requestDelete("warehouse", id)
+    const { id } = await context.params;
+    const body = (await request.json().catch(() => ({}))) as {
+      mode?: "delete" | "archive";
+    };
+    const result = await requestDelete("warehouse", id, { mode: body.mode });
 
-    return NextResponse.json(result.body, { status: result.status })
+    return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
-    console.error("[v0] Error deleting warehouse:", error)
-    return NextResponse.json({ error: "Failed to delete warehouse" }, { status: 500 })
+    console.error("[v0] Error deleting warehouse:", error);
+    return NextResponse.json(
+      { error: "Failed to delete warehouse" },
+      { status: 500 }
+    );
   }
 }
