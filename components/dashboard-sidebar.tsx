@@ -1,108 +1,108 @@
-"use client"
+"use client";
 
-import type { KeyboardEvent } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
+import type { KeyboardEvent } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
 import {
   Warehouse,
   LayoutDashboard,
   Package,
   PackagePlus,
-  PackageMinus,
   BarChart3,
   Settings,
   History,
-  Weight
-} from "lucide-react"
+  Weight,
+} from "lucide-react";
 
 const navItems = [
   {
     title: "داشبورد",
     href: "/dashboard",
-    icon: LayoutDashboard
+    icon: LayoutDashboard,
   },
   {
     title: "محصولات",
     href: "/dashboard/products",
-    icon: Package
+    icon: Package,
   },
   {
-    title: "ورود کالا",
-    href: "/dashboard/stock-in",
-    icon: PackagePlus
-  },
-  {
-    title: "خروج کالا",
-    href: "/dashboard/stock-out",
-    icon: PackageMinus
+    title: "حرکت جدید",
+    href: "/dashboard/movements",
+    icon: PackagePlus,
   },
   {
     title: "گزارش‌ها",
     href: "/dashboard/reports",
-    icon: BarChart3
+    icon: BarChart3,
   },
   {
     title: "انبارها",
     href: "/dashboard/warehouses",
-    icon: Warehouse
+    icon: Warehouse,
   },
   {
     title: "ترازوها",
     href: "/dashboard/scales",
-    icon: Weight
+    icon: Weight,
   },
   {
     title: "سوابق",
     href: "/dashboard/activity",
-    icon: History
+    icon: History,
   },
   {
     title: "تنظیمات",
     href: "/dashboard/settings",
-    icon: Settings
-  }
-]
+    icon: Settings,
+  },
+];
 
 interface DashboardSidebarProps {
-  user: any
-  className?: string
-  onNavigate?: () => void
+  user: any;
+  className?: string;
+  onNavigate?: () => void;
 }
 
-export function DashboardSidebar({ user, className, onNavigate }: DashboardSidebarProps) {
-  const pathname = usePathname()
+export function DashboardSidebar({
+  user,
+  className,
+  onNavigate,
+}: DashboardSidebarProps) {
+  const pathname = usePathname();
 
   const handleNavKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
     const links = Array.from(
-      document.querySelectorAll<HTMLAnchorElement>('a[data-sidebar-link="true"]')
-    )
-    const currentIndex = links.indexOf(event.currentTarget)
+      document.querySelectorAll<HTMLAnchorElement>(
+        'a[data-sidebar-link="true"]'
+      )
+    );
+    const currentIndex = links.indexOf(event.currentTarget);
 
-    if (currentIndex === -1) return
+    if (currentIndex === -1) return;
 
     if (event.key === "ArrowDown") {
-      event.preventDefault()
-      const nextIndex = (currentIndex + 1) % links.length
-      links[nextIndex]?.focus()
+      event.preventDefault();
+      const nextIndex = (currentIndex + 1) % links.length;
+      links[nextIndex]?.focus();
     }
 
     if (event.key === "ArrowUp") {
-      event.preventDefault()
-      const prevIndex = (currentIndex - 1 + links.length) % links.length
-      links[prevIndex]?.focus()
+      event.preventDefault();
+      const prevIndex = (currentIndex - 1 + links.length) % links.length;
+      links[prevIndex]?.focus();
     }
 
     if (event.key === "Home") {
-      event.preventDefault()
-      links[0]?.focus()
+      event.preventDefault();
+      links[0]?.focus();
     }
 
     if (event.key === "End") {
-      event.preventDefault()
-      links[links.length - 1]?.focus()
+      event.preventDefault();
+      links[links.length - 1]?.focus();
     }
-  }
+  };
 
   return (
     <aside className={cn("flex flex-col w-64 border-l bg-card", className)}>
@@ -118,9 +118,10 @@ export function DashboardSidebar({ user, className, onNavigate }: DashboardSideb
 
       <nav className="flex-1 p-4 space-y-1" aria-label="ناوبری داشبورد">
         {navItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href))
+          const Icon = item.icon;
+          const isActive =
+            pathname === item.href ||
+            (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
           return (
             <Link
@@ -141,7 +142,7 @@ export function DashboardSidebar({ user, className, onNavigate }: DashboardSideb
               <Icon className="size-5 shrink-0" />
               <span>{item.title}</span>
             </Link>
-          )
+          );
         })}
       </nav>
 
@@ -159,5 +160,5 @@ export function DashboardSidebar({ user, className, onNavigate }: DashboardSideb
         </div>
       </div>
     </aside>
-  )
+  );
 }
