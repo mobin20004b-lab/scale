@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireSession } from "@/lib/route-guards";
 import { prisma } from "@/lib/prisma";
 import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
@@ -11,9 +11,9 @@ export async function PUT(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const guard = await requireSession({ adminOnly: true });
+    if ("error" in guard) {
+      return guard.error;
     }
 
     const { id } = await context.params;
@@ -69,7 +69,7 @@ export async function PUT(
 
     await prisma.activity.create({
       data: {
-        userId: (session.user as any).id,
+        userId: (guard.session!.user as any).id,
         action: "ویرایش محصول",
         entity: "Product",
         entityId: product.id,
@@ -93,9 +93,9 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const guard = await requireSession({ adminOnly: true });
+    if ("error" in guard) {
+      return guard.error;
     }
 
     const { id } = await context.params;
@@ -114,7 +114,7 @@ export async function DELETE(
 
     await prisma.activity.create({
       data: {
-        userId: (session.user as any).id,
+        userId: (guard.session!.user as any).id,
         action: "حذف محصول",
         entity: "Product",
         entityId: product.id,

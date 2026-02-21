@@ -2,8 +2,14 @@ import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { UserRole } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { requireSession } from "@/lib/route-guards"
 
 export async function POST(request: Request) {
+  const guard = await requireSession({ adminOnly: true })
+  if ("error" in guard) {
+    return guard.error
+  }
+
   const body = (await request.json()) as {
     name?: string
     email?: string

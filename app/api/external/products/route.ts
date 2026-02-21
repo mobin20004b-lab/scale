@@ -1,23 +1,12 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-
-// Simple API key check (in production, use proper token authentication)
-function checkAuth(request: Request) {
-  const authHeader = request.headers.get('authorization')
-  const apiKey = authHeader?.replace('Bearer ', '')
-  
-  // In production, validate against database or environment variable
-  // For now, we'll accept any bearer token (you should implement proper validation)
-  return !!apiKey
-}
+import { requireExternalApiAuth } from "@/lib/external-api-auth"
 
 export async function GET(request: Request) {
   try {
-    if (!checkAuth(request)) {
-      return NextResponse.json(
-        { error: "Unauthorized - API key required" },
-        { status: 401 }
-      )
+    const auth = await requireExternalApiAuth(request);
+    if ("error" in auth) {
+      return auth.error;
     }
 
     const products = await prisma.product.findMany({
