@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-const requiredText = (message: string) =>
-  z.string().trim().min(1, message);
+const requiredText = (message: string) => z.string().trim().min(1, message);
 
 const optionalText = z
   .string()
@@ -84,66 +83,42 @@ export const productPayloadSchema = z.object({
 const stockMovementBase = {
   productId: requiredText("محصول را انتخاب کنید"),
   quantity: positiveNumberString,
-  invoiceNumber: z.string().optional(),
-  notes: z.string().optional(),
 };
 
 export const stockInFormSchema = z.object({
   ...stockMovementBase,
-  supplier: z.string().optional(),
-  sourceDocumentType: z.string().optional(),
-  sourceDocumentNumber: z.string().optional(),
   lotBatch: z.string().optional(),
-  expiryDate: z.string().optional(),
-  supplierLot: z.string().optional(),
-  qualityResult: z.string().optional(),
 });
 
 export const stockOutFormSchema = z.object({
-  ...stockMovementBase,
-  customer: z.string().optional(),
+  productId: requiredText("محصول را انتخاب کنید"),
+  warehouseId: requiredText("انبار را انتخاب کنید"),
+  stockInId: requiredText("یک ورودی را انتخاب کنید"),
 });
 
 export const stockInPayloadSchema = z.object({
   productId: requiredText("محصول را انتخاب کنید"),
   quantity: z.coerce.number().positive("مقدار باید بیشتر از صفر باشد"),
-  supplier: optionalNullableText,
-  invoiceNumber: optionalNullableText,
-  notes: optionalNullableText,
   warehouseId: z.string().trim().optional().nullable(),
   scaleId: z.string().trim().optional().nullable(),
   scaleWeight: z.coerce.number().optional().nullable(),
-  sourceDocumentType: optionalNullableText,
-  sourceDocumentNumber: optionalNullableText,
-  lotBatch: optionalNullableText,
-  expiryDate: optionalNullableText,
-  supplierLot: optionalNullableText,
-  qualityResult: optionalNullableText,
   capturedAt: z.string().datetime().optional().nullable(),
   stableWindowMs: z.coerce.number().int().positive().optional().nullable(),
   sourceScaleId: z.string().trim().optional().nullable(),
   confidence: z.coerce.number().min(0).max(1).optional().nullable(),
   captureSource: z.enum(["current", "stable-average", "auto", "locked", "manual"]).optional().nullable(),
-  manualEntryReason: optionalNullableText,
 });
 
 export const stockOutPayloadSchema = z.object({
   productId: requiredText("محصول را انتخاب کنید"),
-  quantity: z.coerce.number().positive("مقدار باید بیشتر از صفر باشد"),
-  customer: optionalNullableText,
-  invoiceNumber: optionalNullableText,
-  notes: optionalNullableText,
   warehouseId: requiredText("انبار را انتخاب کنید"),
+  stockInId: requiredText("یک ورودی را انتخاب کنید"),
 });
 
 export const externalStockInPayloadSchema = stockInPayloadSchema.pick({
   productId: true,
   quantity: true,
-  supplier: true,
-  invoiceNumber: true,
-  notes: true,
   warehouseId: true,
-  lotBatch: true,
 });
 
 export const externalStockOutPayloadSchema = stockOutPayloadSchema;

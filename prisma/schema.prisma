@@ -104,16 +104,7 @@ model StockIn {
   sourceScaleId String?
   confidence    Float?
   captureSource String?
-  manualEntryReason String?
-  supplier      String?
-  invoiceNumber String?
-  sourceDocumentType String?
-  sourceDocumentNumber String?
-  lotBatch      String?
-  expiryDate    String?
-  supplierLot   String?
-  qualityResult String?
-  notes         String?
+  lotBatch      String
   date          DateTime   @default(now())
   createdAt     DateTime   @default(now())
   product       Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -121,6 +112,7 @@ model StockIn {
   user          User       @relation(fields: [userId], references: [id])
   warehouse     Warehouse? @relation(fields: [warehouseId], references: [id])
   inventoryLedgerEntries InventoryLedgerEntry[]
+  stockOuts      StockOut[]
 
   @@index([productId])
   @@index([userId])
@@ -235,21 +227,21 @@ model ScaleTelemetry {
 model StockOut {
   id            String   @id @default(cuid())
   productId     String
+  stockInId     String
   userId        String
   warehouseId   String?
   quantity      Float
   weight        Float
-  customer      String?
-  invoiceNumber String?
-  notes         String?
   date          DateTime @default(now())
   createdAt     DateTime @default(now())
   product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockIn       StockIn  @relation(fields: [stockInId], references: [id])
   user          User     @relation(fields: [userId], references: [id])
   warehouse     Warehouse? @relation(fields: [warehouseId], references: [id])
   inventoryLedgerEntries InventoryLedgerEntry[]
 
   @@index([productId])
+  @@index([stockInId])
   @@index([userId])
   @@index([warehouseId])
   @@index([date])

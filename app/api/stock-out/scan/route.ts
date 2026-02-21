@@ -7,7 +7,6 @@ import {
   decrementWarehouseInventory,
   InventoryConflictError,
 } from "@/lib/inventory-ledger";
-import { resolveMovementQuantityAndWeight } from "@/lib/movement-metrics";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -60,14 +59,13 @@ export async function POST(request: Request) {
 
       const [product, warehouseBalance] = await Promise.all([
         prisma.product.findUnique({ where: { id: resolved.productId } }),
-        prisma.warehouseInventoryBalance.findUnique({
+        prisma.warehouseInventoryBalance.findFirst({
           where: {
-            productId_warehouseId_lotBatch: {
-              productId: resolved.productId,
-              warehouseId: body.warehouseId!,
-              lotBatch: "",
-            },
+            productId: resolved.productId,
+            warehouseId: body.warehouseId!,
+            quantity: { gt: 0 },
           },
+          orderBy: { updatedAt: "asc" },
         }),
       ]);
 
@@ -124,29 +122,27 @@ export async function POST(request: Request) {
       }
 
       try {
-        const movement = resolveMovementQuantityAndWeight(
-          product,
-          requestedQuantity
-        );
+        const selectedStockIn = await prisma.stockIn.findFirst({ where: { productId: product.id, warehouseId: body.warehouseId!, lotBatch: warehouseBalance?.lotBatch ?? "" } });
+        if (!selectedStockIn) throw new InventoryConflictError("No entry lot available");
 
         const stockOut = await prisma.$transaction(async (tx) => {
           const created = await tx.stockOut.create({
             data: {
               productId: product.id,
               userId: (session.user as any).id,
-              quantity: movement.quantity,
-              weight: movement.weight,
+              quantity: selectedStockIn.quantity,
+              weight: selectedStockIn.weight,
+              stockInId: selectedStockIn.id,
               warehouseId: body.warehouseId,
-              notes: `scan:${resolved.barcode};type:${resolved.kind};lot:${resolved.lotNumber ?? "-"}`,
             },
           });
 
           await decrementWarehouseInventory(tx, {
             productId: product.id,
             warehouseId: body.warehouseId!,
-            quantity: requestedQuantity,
+            quantity: selectedStockIn.quantity,
+            lotBatch: selectedStockIn.lotBatch,
             stockOutId: created.id,
-            notes: created.notes,
           });
 
           await tx.activity.create({

@@ -45,9 +45,6 @@ export async function POST(request: Request) {
     },
     stockOutDraft: {
       productId: product.id,
-      quantity: 1,
-      customer: null,
-      notes: `Draft created from barcode ${normalized.normalized}`,
     },
     lastMovement,
   });

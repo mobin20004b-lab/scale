@@ -116,8 +116,6 @@ export async function GET(request: Request) {
         "محصول",
         "مقدار",
         "واحد",
-        "طرف معامله",
-        "شماره مرجع",
         "کاربر",
       ]
         .map(csvEscape)
@@ -132,8 +130,6 @@ export async function GET(request: Request) {
           item.product.name,
           item.quantity.toString(),
           item.product.unit,
-          item.supplier || "-",
-          item.invoiceNumber || "-",
           item.user.full_name,
         ]
           .map(csvEscape)
@@ -149,8 +145,6 @@ export async function GET(request: Request) {
           item.product.name,
           item.quantity.toString(),
           item.product.unit,
-          item.customer || "-",
-          item.invoiceNumber || "-",
           item.user.full_name,
         ]
           .map(csvEscape)

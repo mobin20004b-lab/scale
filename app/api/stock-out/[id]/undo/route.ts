@@ -9,18 +9,13 @@ const UNDO_BLOCKED_DEPENDENCY =
   "Undo blocked: subsequent warehouse transactions exist for this product.";
 
 type UndoCheck =
-  | {
-      ok: true;
-      stockOut: NonNullable<
-        Awaited<ReturnType<typeof prisma.stockOut.findUnique>>
-      >;
-    }
+  | { ok: true; stockOut: any }
   | { ok: false; status: number; error: string; reason: string };
 
 async function getUndoEligibility(id: string): Promise<UndoCheck> {
   const stockOut = await prisma.stockOut.findUnique({
     where: { id },
-    include: { product: true },
+    include: { product: true, stockIn: true },
   });
 
   if (!stockOut) {
@@ -133,6 +128,7 @@ export async function POST(
         productId: result.stockOut.productId,
         warehouseId: result.stockOut.warehouseId!,
         quantity: result.stockOut.quantity,
+        lotBatch: result.stockOut.stockIn?.lotBatch ?? "",
         stockOutId: result.stockOut.id,
         notes: "Undo stock-out",
       });

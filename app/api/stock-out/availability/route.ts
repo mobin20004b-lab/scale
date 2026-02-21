@@ -25,10 +25,31 @@ export async function GET(request: Request) {
     warehouseId,
   });
 
+  const balances = await prisma.warehouseInventoryBalance.findMany({
+    where: {
+      productId,
+      warehouseId,
+      quantity: { gt: 0 },
+    },
+    select: { lotBatch: true, quantity: true },
+    orderBy: { updatedAt: "asc" },
+  });
+
+  const entryLots = await prisma.stockIn.findMany({
+    where: {
+      productId,
+      warehouseId,
+      lotBatch: { in: balances.map((b) => b.lotBatch) },
+    },
+    select: { id: true, lotBatch: true, quantity: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+
   return NextResponse.json({
     productId,
     warehouseId,
     available,
+    entryLots,
     refreshedAt: new Date().toISOString(),
   });
 }

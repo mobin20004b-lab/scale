@@ -23,9 +23,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const warehouseId = parsed.warehouseId;
     const [product, warehouse] = await Promise.all([
       prisma.product.findUnique({ where: { id: parsed.productId } }),
-      prisma.warehouse.findUnique({ where: { id: parsed.warehouseId } }),
+      prisma.warehouse.findUnique({ where: { id: warehouseId } }),
     ]);
 
     if (!product) {
@@ -42,22 +43,15 @@ export async function POST(request: Request) {
     const movement = resolveMovementQuantityAndWeight(product, parsed.quantity);
 
     const stockIn = await prisma.$transaction(async (tx) => {
+      const createdLotBatch = `ENTRY-${Date.now()}`;
       const createdStockIn = await tx.stockIn.create({
         data: {
           productId: parsed.productId,
           userId: (session.user as any).id,
           quantity: movement.quantity,
           weight: movement.weight,
-          supplier: parsed.supplier,
-          invoiceNumber: parsed.invoiceNumber,
-          sourceDocumentType: parsed.sourceDocumentType,
-          sourceDocumentNumber: parsed.sourceDocumentNumber,
-          lotBatch: parsed.lotBatch,
-          expiryDate: parsed.expiryDate,
-          supplierLot: parsed.supplierLot,
-          qualityResult: parsed.qualityResult,
-          notes: parsed.notes,
-          warehouseId: parsed.warehouseId,
+          lotBatch: createdLotBatch,
+          warehouseId: warehouseId,
           scaleId: parsed.scaleId || null,
           scaleWeight: parsed.scaleWeight,
           capturedAt: parsed.capturedAt ? new Date(parsed.capturedAt) : null,
@@ -65,17 +59,15 @@ export async function POST(request: Request) {
           sourceScaleId: parsed.sourceScaleId ?? null,
           confidence: parsed.confidence ?? null,
           captureSource: parsed.captureSource ?? null,
-          manualEntryReason: parsed.manualEntryReason ?? null,
         },
       });
 
       await incrementWarehouseInventory(tx, {
         productId: parsed.productId,
-        warehouseId: parsed.warehouseId,
+        warehouseId: warehouseId,
         quantity: parsed.quantity,
-        lotBatch: parsed.lotBatch,
+        lotBatch: createdLotBatch,
         stockInId: createdStockIn.id,
-        notes: parsed.notes,
       });
 
       await tx.activity.create({
