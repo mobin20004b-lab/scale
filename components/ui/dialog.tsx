@@ -5,6 +5,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { XIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { shouldPreventDialogDismiss, type DialogCloseBehavior } from '@/lib/dialog-policy'
 
 function Dialog({
   ...props
@@ -50,9 +51,16 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  closeBehavior = 'default',
+  initialFocusSelector,
+  onOpenAutoFocus,
+  onEscapeKeyDown,
+  onPointerDownOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  closeBehavior?: DialogCloseBehavior
+  initialFocusSelector?: string
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -63,6 +71,28 @@ function DialogContent({
           'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg',
           className,
         )}
+        onOpenAutoFocus={(event) => {
+          if (initialFocusSelector) {
+            const target = event.currentTarget.querySelector<HTMLElement>(initialFocusSelector)
+            if (target) {
+              event.preventDefault()
+              target.focus()
+            }
+          }
+          onOpenAutoFocus?.(event)
+        }}
+        onEscapeKeyDown={(event) => {
+          if (shouldPreventDialogDismiss(closeBehavior)) {
+            event.preventDefault()
+          }
+          onEscapeKeyDown?.(event)
+        }}
+        onPointerDownOutside={(event) => {
+          if (shouldPreventDialogDismiss(closeBehavior)) {
+            event.preventDefault()
+          }
+          onPointerDownOutside?.(event)
+        }}
         {...props}
       >
         {children}

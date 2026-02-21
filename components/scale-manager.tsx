@@ -20,6 +20,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -525,16 +527,15 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
               افزودن ترازو
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent initialFocusSelector="#scale-name-input">
             <DialogHeader>
-              <DialogTitle>
-                {editing ? "ویرایش ترازو" : "افزودن ترازو"}
-              </DialogTitle>
+              <DialogTitle>{editing ? "ویرایش ترازو" : "افزودن ترازو"}</DialogTitle>
+              <DialogDescription>تنظیمات پایه ترازو و اتصال آن به انبار را مشخص کنید.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-2">
                 <Label>نام ترازو</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
+                <Input id="scale-name-input" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>انبار</Label>
@@ -609,9 +610,10 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                   onChange={(e) => setLocationNote(e.target.value)}
                 />
               </div>
-              <Button onClick={submitScale} className="w-full">
-                ذخیره
-              </Button>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpen(false)}>انصراف</Button>
+                <Button onClick={submitScale}>ذخیره</Button>
+              </DialogFooter>
             </div>
           </DialogContent>
         </Dialog>
@@ -984,14 +986,14 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
       </CardContent>
 
       <Dialog open={Boolean(copyConfirmScale)} onOpenChange={(openState) => !openState && setCopyConfirmScale(null)}>
-        <DialogContent>
+        <DialogContent closeBehavior="destructive" initialFocusSelector="#copy-token-password">
           <DialogHeader>
             <DialogTitle>کپی توکن ترازو (حساس)</DialogTitle>
+            <DialogDescription>این عملیات در Activity ثبت می‌شود. برای ادامه، رمز عبور فعلی خود را وارد کنید.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm">
-            <p>این عملیات در Activity ثبت می‌شود. برای ادامه، رمز عبور فعلی خود را وارد کنید.</p>
-            <Input type="password" value={reauthPassword} onChange={(event) => setReauthPassword(event.target.value)} placeholder="رمز عبور" />
-            <div className="flex justify-end gap-2">
+            <Input id="copy-token-password" type="password" value={reauthPassword} onChange={(event) => setReauthPassword(event.target.value)} placeholder="رمز عبور" />
+            <DialogFooter>
               <Button variant="outline" onClick={() => setCopyConfirmScale(null)}>انصراف</Button>
               <Button disabled={reauthInProgress || !copyConfirmScale} onClick={async () => {
                 if (!copyConfirmScale) return;
@@ -1001,20 +1003,20 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                 <KeyRound className="size-4 ml-2" />
                 ادامه و کپی توکن
               </Button>
-            </div>
+            </DialogFooter>
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(rotateConfirmScale)} onOpenChange={(openState) => !openState && setRotateConfirmScale(null)}>
-        <DialogContent>
+        <DialogContent closeBehavior="destructive" initialFocusSelector="#rotate-token-password">
           <DialogHeader>
             <DialogTitle>چرخش توکن ترازو</DialogTitle>
+            <DialogDescription>پس از چرخش، توکن قبلی بلافاصله نامعتبر می‌شود. این عملیات در Activity ثبت می‌شود.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm">
-            <p>پس از چرخش، توکن قبلی بلافاصله نامعتبر می‌شود. این عملیات در Activity ثبت می‌شود.</p>
-            <Input type="password" value={reauthPassword} onChange={(event) => setReauthPassword(event.target.value)} placeholder="رمز عبور" />
-            <div className="flex justify-end gap-2">
+            <Input id="rotate-token-password" type="password" value={reauthPassword} onChange={(event) => setReauthPassword(event.target.value)} placeholder="رمز عبور" />
+            <DialogFooter>
               <Button variant="outline" onClick={() => setRotateConfirmScale(null)}>انصراف</Button>
               <Button disabled={reauthInProgress || !rotateConfirmScale} onClick={async () => {
                 if (!rotateConfirmScale) return;
@@ -1024,23 +1026,23 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                 <RefreshCw className="size-4 ml-2" />
                 چرخش توکن
               </Button>
-            </div>
+            </DialogFooter>
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(rotatedTokenData)} onOpenChange={(openState) => !openState && setRotatedTokenData(null)}>
-        <DialogContent>
+        <DialogContent closeBehavior="destructive" initialFocusSelector="#rotated-token-close">
           <DialogHeader>
             <DialogTitle>توکن جدید (نمایش یک‌باره)</DialogTitle>
+            <DialogDescription>این مقدار فقط یک‌بار نمایش داده می‌شود. آن را در جای امن نگه‌داری کنید.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm">
-            <p className="text-muted-foreground">این مقدار فقط یک‌بار نمایش داده می‌شود. آن را در جای امن نگه‌داری کنید.</p>
             <div className="rounded-md border p-2 font-mono text-xs break-all">
               {rotatedTokenData?.token}
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setRotatedTokenData(null)}>بستن</Button>
+            <DialogFooter>
+              <Button id="rotated-token-close" variant="outline" onClick={() => setRotatedTokenData(null)}>بستن</Button>
               <Button onClick={async () => {
                 if (!rotatedTokenData) return;
                 await navigator.clipboard.writeText(rotatedTokenData.token);
@@ -1049,7 +1051,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                 <Copy className="size-4 ml-2" />
                 کپی توکن جدید
               </Button>
-            </div>
+            </DialogFooter>
           </div>
         </DialogContent>
       </Dialog>
