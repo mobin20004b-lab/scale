@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -155,16 +157,15 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
               افزودن انبار
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent initialFocusSelector="#warehouse-name-input">
             <DialogHeader>
-              <DialogTitle>
-                {editing ? "ویرایش انبار" : "افزودن انبار"}
-              </DialogTitle>
+              <DialogTitle>{editing ? "ویرایش انبار" : "افزودن انبار"}</DialogTitle>
+              <DialogDescription>اطلاعات پایه انبار را تکمیل کنید و سپس ذخیره را بزنید.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-2">
                 <Label>نام انبار</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
+                <Input id="warehouse-name-input" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>موقعیت</Label>
@@ -181,9 +182,10 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
                   className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
               </div>
-              <Button onClick={submitWarehouse} className="w-full">
-                ذخیره
-              </Button>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpen(false)}>انصراف</Button>
+                <Button onClick={submitWarehouse}>ذخیره</Button>
+              </DialogFooter>
             </div>
           </DialogContent>
         </Dialog>

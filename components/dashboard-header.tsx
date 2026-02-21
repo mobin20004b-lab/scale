@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
@@ -64,7 +66,16 @@ export function DashboardHeader({
   const router = useRouter();
   const pathname = usePathname();
   const [quickOpen, setQuickOpen] = useState(false);
+  const [recentActionLabels, setRecentActionLabels] = useState<string[]>([]);
   const t = getDictionary(locale);
+
+  const favoriteActions = useMemo(
+    () => [
+      { label: "ثبت حرکت جدید", href: "/dashboard/movements", icon: Plus, shortcut: "F1" },
+      { label: "جست‌وجوی محصول", href: "/dashboard/products", icon: Search, shortcut: "F2" },
+    ],
+    [],
+  );
 
   const contextualActions = useMemo(() => {
     if (pathname.startsWith("/dashboard/stock-in")) {
@@ -99,6 +110,63 @@ export function DashboardHeader({
     pageCtaMap.find((item) => pathname.startsWith(item.match) && item.match !== "/dashboard") ??
     pageCtaMap[pageCtaMap.length - 1];
 
+  const allQuickActions = useMemo(() => {
+    const seen = new Set<string>();
+    return [...contextualActions, ...favoriteActions].filter((item) => {
+      if (seen.has(item.label)) return false;
+      seen.add(item.label);
+      return true;
+    });
+  }, [contextualActions, favoriteActions]);
+
+  const recentActions = useMemo(
+    () =>
+      recentActionLabels
+        .map((label) => allQuickActions.find((action) => action.label === label))
+        .filter((action): action is (typeof allQuickActions)[number] => Boolean(action)),
+    [allQuickActions, recentActionLabels],
+  );
+
+  const notifications = useMemo(
+    () => [
+      {
+        title: "موجودی کم",
+        subtitle: "5 محصول در وضعیت بحرانی",
+        href: "/dashboard/products?filter=low-stock",
+        unread: true,
+      },
+      {
+        title: "فرمان‌های ناموفق ترازو",
+        subtitle: "2 خطا نیازمند بررسی",
+        href: "/dashboard/activity?status=FAILED",
+        unread: true,
+      },
+      {
+        title: "سفارش‌های خروج معطل",
+        subtitle: "3 سفارش تایید نشده",
+        href: "/dashboard/stock-out",
+        unread: false,
+      },
+    ],
+    [],
+  );
+
+  const unreadCount = notifications.filter((item) => item.unread).length;
+
+  useEffect(() => {
+    const raw = window.localStorage.getItem("dashboard.quick-actions.recent");
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as string[];
+      if (Array.isArray(parsed)) {
+        setRecentActionLabels(parsed.slice(0, 5));
+      }
+    } catch {
+      window.localStorage.removeItem("dashboard.quick-actions.recent");
+    }
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -113,6 +181,14 @@ export function DashboardHeader({
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: "/login" });
+  };
+
+  const runQuickAction = (item: { href: string; label: string }) => {
+    const nextRecent = [item.label, ...recentActionLabels.filter((label) => label !== item.label)].slice(0, 5);
+    setRecentActionLabels(nextRecent);
+    window.localStorage.setItem("dashboard.quick-actions.recent", JSON.stringify(nextRecent));
+    setQuickOpen(false);
+    router.push(item.href);
   };
 
   return (
@@ -146,11 +222,13 @@ export function DashboardHeader({
             size="sm"
             onClick={() => setQuickOpen(true)}
             className="hidden sm:inline-flex"
+            aria-label="باز کردن جست‌وجوی سراسری (میانبر Ctrl + K)"
           >
             <Search className="ml-2 size-4" />
             اقدامات سریع
             <Kbd className="mr-2">⌘/Ctrl + K</Kbd>
           </Button>
+          <span className="hidden xl:inline-flex text-xs text-muted-foreground">جست‌وجوی سراسری: <Kbd className="mx-1">⌘/Ctrl + K</Kbd></span>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -161,20 +239,23 @@ export function DashboardHeader({
                 aria-label="اعلان‌ها"
               >
                 <Bell className="size-5" />
-                <span className="absolute top-1 left-1 size-2 bg-destructive rounded-full" />
+                {unreadCount > 0 && <span className="absolute top-1 left-1 size-2 bg-destructive rounded-full" />}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel>{t.header.operationalInbox}</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-medium">موجودی کم</span>
-                  <span className="text-xs text-muted-foreground">
-                    5 محصول در وضعیت بحرانی
-                  </span>
-                </div>
-              </DropdownMenuItem>
+              {notifications.map((item) => (
+                <DropdownMenuItem key={item.title} asChild>
+                  <Link href={item.href} className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium">{item.title}</span>
+                      <span className="text-xs text-muted-foreground">{item.subtitle}</span>
+                    </div>
+                    {item.unread && <Badge className="mt-1" variant="destructive">جدید</Badge>}
+                  </Link>
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -194,9 +275,32 @@ export function DashboardHeader({
         <CommandInput placeholder="جست‌وجوی عملیات..." />
         <CommandList>
           <CommandEmpty>نتیجه‌ای یافت نشد.</CommandEmpty>
+          {recentActions.length > 0 && (
+            <>
+              <CommandGroup heading="اخیراً استفاده شده">
+                {recentActions.map((item) => (
+                  <CommandItem key={`recent-${item.label}`} onSelect={() => runQuickAction(item)}>
+                    <item.icon className="size-4" />
+                    {item.label}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+            </>
+          )}
+          <CommandGroup heading="پرکاربردها">
+            {favoriteActions.map((item) => (
+              <CommandItem key={`favorite-${item.label}`} onSelect={() => runQuickAction(item)}>
+                <item.icon className="size-4" />
+                {item.label}
+                <CommandShortcut>{item.shortcut}</CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+          <CommandSeparator />
           <CommandGroup heading="اقدامات این صفحه">
             {contextualActions.map((item) => (
-              <CommandItem key={item.label} onSelect={() => router.push(item.href)}>
+              <CommandItem key={item.label} onSelect={() => runQuickAction(item)}>
                 <item.icon className="size-4" />
                 {item.label}
                 <CommandShortcut>{item.shortcut}</CommandShortcut>
