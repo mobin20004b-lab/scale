@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, RefreshCcw, Scan, Plus, TriangleAlert, Info, Lock, CheckCircle2, Volume2 } from "lucide-react";
+import { Loader2, RefreshCcw, Scan, Plus, TriangleAlert, Info, Lock, CheckCircle2, Volume2, ExternalLink, Clock3 } from "lucide-react";
 import { useScaleLive } from "@/hooks/use-scale-live";
 import { BarcodeScanner } from "./barcode-scanner";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,14 @@ import { EmptyStatePanel } from "@/components/ui/async-state";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   focusFirstInvalidField,
   FormErrorSummary,
@@ -80,6 +88,8 @@ const SPARKLINE_WINDOW_MS = 10000;
 const STABLE_AVERAGE_WINDOW_MS = 2000;
 const DEFAULT_AUTO_CAPTURE_READINGS = 4;
 const DEFAULT_MANUAL_REASON = "Scale unavailable";
+const CAPTURE_FRESHNESS_MS = 15000;
+const UNKNOWN_BARCODE_DEBOUNCE_MS = 5000;
 
 type WeightTrendPoint = { value: number; timestamp: number };
 
@@ -108,7 +118,7 @@ export function StockInForm({
   const [useAutoCapture, setUseAutoCapture] = useState(false);
   const [autoCaptureReadings, setAutoCaptureReadings] = useState(DEFAULT_AUTO_CAPTURE_READINGS);
   const [scannerStatus, setScannerStatus] = useState<
-    "idle" | "scanning" | "success" | "error"
+    "idle" | "scanning" | "success" | "unknown" | "duplicate" | "error"
   >("idle");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [manualMode, setManualMode] = useState(false);
@@ -118,7 +128,15 @@ export function StockInForm({
   const [labelSize, setLabelSize] = useState<"50x30" | "60x40">("50x30");
   const [lastStockInId, setLastStockInId] = useState<string | null>(null);
   const [capturedAt, setCapturedAt] = useState<string | null>(null);
+  const [capturedScaleWeight, setCapturedScaleWeight] = useState<number | null>(null);
+  const [lastStableAt, setLastStableAt] = useState<string | null>(null);
   const [captureSource, setCaptureSource] = useState<"current" | "stable-average" | "auto" | "locked" | "manual" | null>(null);
+  const [pendingPrintHtml, setPendingPrintHtml] = useState<string | null>(null);
+  const [pendingPrintIds, setPendingPrintIds] = useState<string[]>([]);
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
+  const [isPopupBlocked, setIsPopupBlocked] = useState(false);
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+  const lastUnknownScanRef = useRef<{ code: string; timestamp: number } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const {
@@ -292,6 +310,9 @@ export function StockInForm({
       : "fluctuating";
 
   const lastReadingAgeMs = selectedScaleLive?.lastReadingAgeMs ?? null;
+  const captureAgeMs = capturedAt ? Date.now() - new Date(capturedAt).getTime() : null;
+  const isCapturedMeasurementStale =
+    !manualMode && (captureAgeMs === null || captureAgeMs > CAPTURE_FRESHNESS_MS || isWeightStale);
 
   const grossWeight = liveWeight;
   const tareWeight = selectedScale?.tare ?? 0;
@@ -305,6 +326,7 @@ export function StockInForm({
       shouldValidate: true,
     });
     setCapturedAt(new Date().toISOString());
+    setCapturedScaleWeight(value);
     setCaptureSource(source);
 
     if (playAudioFeedback && typeof window !== "undefined") {
@@ -329,6 +351,26 @@ export function StockInForm({
   }, [useAutoCapture, isStable, stableAverage, isWeightLocked, manualMode]);
 
   useEffect(() => {
+    if (isStable) {
+      setLastStableAt(new Date().toISOString());
+    }
+  }, [isStable, stableAverage]);
+
+  useEffect(() => {
+    if (manualMode) {
+      return;
+    }
+
+    if (!capturedAt) {
+      return;
+    }
+
+    if (captureAgeMs !== null && captureAgeMs > CAPTURE_FRESHNESS_MS) {
+      toast.warning("آخرین وزن کپچر شده قدیمی است؛ لطفاً دوباره وزن‌گیری کنید.");
+    }
+  }, [captureAgeMs, capturedAt, manualMode]);
+
+  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key !== "F9") {
         return;
@@ -345,6 +387,18 @@ export function StockInForm({
   }, [isSubmitDisabled]);
 
   const handleBarcodeScanned = async (barcode: string) => {
+    const normalizedBarcode = barcode.trim();
+    const now = Date.now();
+    if (
+      lastUnknownScanRef.current &&
+      lastUnknownScanRef.current.code === normalizedBarcode &&
+      now - lastUnknownScanRef.current.timestamp < UNKNOWN_BARCODE_DEBOUNCE_MS
+    ) {
+      setScannerStatus("duplicate");
+      toast.message("این بارکد ناشناس اخیراً ثبت شده است.");
+      return;
+    }
+
     const product = findProductByScannedBarcode(products, barcode);
     if (product) {
       setValue("productId", product.id.toString(), {
@@ -354,21 +408,34 @@ export function StockInForm({
       });
       setSelectedProduct(product);
       setShowScanner(false);
+      setScannerStatus("success");
       toast.success(`محصول پیدا شد: ${product.name}`);
       setFocus("quantity");
     } else {
+      lastUnknownScanRef.current = { code: normalizedBarcode, timestamp: now };
       await fetch("/api/barcodes/unknown", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ barcode, source: "stock-in" }),
       }).catch(() => null);
-      toast.error("محصولی با این بارکد یافت نشد؛ مورد در لیست بارکدهای ناشناخته ثبت شد.");
+      setScannerStatus("unknown");
+      toast.error("محصولی با این بارکد یافت نشد؛ مورد در لیست بارکدهای ناشناخته ثبت شد.", {
+        action: {
+          label: "open unknown barcode queue",
+          onClick: () => router.push("/dashboard/stock-in"),
+        },
+      });
     }
   };
 
   const onSubmit = async (data: StockInFormData) => {
     if (manualMode && manualReason.trim().length === 0) {
       toast.error("در حالت دستی، ثبت دلیل الزامی است.");
+      return;
+    }
+
+    if (!manualMode && isCapturedMeasurementStale) {
+      toast.error("آخرین وزن معتبر نیست. پیش از ثبت، دوباره وزن را کپچر کنید.");
       return;
     }
 
@@ -386,7 +453,7 @@ export function StockInForm({
           quantity: parseFloat(data.quantity),
           warehouseId: selectedWarehouseId || null,
           scaleId: manualMode ? null : selectedScaleId || null,
-          scaleWeight: manualMode ? null : liveWeight,
+          scaleWeight: manualMode ? null : capturedScaleWeight,
           capturedAt,
           stableWindowMs: STABLE_AVERAGE_WINDOW_MS,
           sourceScaleId: manualMode ? null : selectedScaleId || null,
@@ -415,6 +482,7 @@ export function StockInForm({
         setIsWeightLocked(false);
         setLockedWeight(null);
         setCapturedAt(null);
+        setCapturedScaleWeight(null);
         setCaptureSource(null);
         setManualReason("");
         router.refresh();
@@ -431,7 +499,41 @@ export function StockInForm({
     }
   };
 
+  const recordPrintAttempt = async (stockInIds: string[], outcome: "attempted" | "blocked" | "printed", details?: string) => {
+    await fetch("/api/labels/attempt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stockInIds, labelSize, outcome, details }),
+    }).catch(() => null);
+  };
+
+  const executePrint = async () => {
+    if (!pendingPrintHtml || pendingPrintIds.length === 0) {
+      return;
+    }
+
+    await recordPrintAttempt(pendingPrintIds, "attempted");
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=960,height=700");
+    if (!printWindow) {
+      setIsPopupBlocked(true);
+      await recordPrintAttempt(pendingPrintIds, "blocked", "popup blocked");
+      toast.error("پنجره چاپ توسط مرورگر مسدود شد. پس از اجازه popup دوباره تلاش کنید.");
+      return;
+    }
+
+    printWindow.document.write(pendingPrintHtml);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    setIsPrintPreviewOpen(false);
+    setPendingPrintHtml(null);
+    setPendingPrintIds([]);
+    setIsPopupBlocked(false);
+    await recordPrintAttempt(pendingPrintIds, "printed");
+  };
+
   const handlePrintLabels = async (stockInIds: string[]) => {
+    setIsPreparingPrint(true);
     const response = await fetch("/api/labels", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -439,19 +541,16 @@ export function StockInForm({
     });
 
     if (!response.ok) {
+      setIsPreparingPrint(false);
       throw new Error("print failed");
     }
 
     const data = (await response.json()) as { html: string };
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=960,height=700");
-    if (!printWindow) {
-      throw new Error("print window blocked");
-    }
-
-    printWindow.document.write(data.html);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    setPendingPrintHtml(data.html);
+    setPendingPrintIds(stockInIds);
+    setIsPopupBlocked(false);
+    setIsPrintPreviewOpen(true);
+    setIsPreparingPrint(false);
   };
 
   if (products.length === 0) {
@@ -570,15 +669,21 @@ export function StockInForm({
                 <p className="text-sm font-semibold">Scale Status Widget</p>
                 <p className="text-xs text-muted-foreground">scan → weigh → confirm</p>
               </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="manual-mode" className="text-xs">حالت دستی</Label>
-                <Switch
-                  id="manual-mode"
-                  checked={manualMode}
-                  onCheckedChange={setManualMode}
-                />
+              <div className="flex items-center gap-2 rounded-md border p-1">
+                <Button type="button" variant={!manualMode ? "default" : "ghost"} size="sm" onClick={() => setManualMode(false)}>
+                  Scale-assisted
+                </Button>
+                <Button type="button" variant={manualMode ? "default" : "ghost"} size="sm" onClick={() => setManualMode(true)}>
+                  Manual
+                </Button>
               </div>
             </div>
+
+            <p className="text-xs text-muted-foreground rounded-md border border-dashed p-2">
+              {!manualMode
+                ? "در حالت scale-assisted فقط وزن کپچر شده‌ی تازه ثبت می‌شود و وزن‌های قدیمی قابل ارسال نیستند."
+                : "در حالت manual مسئولیت ورود مقدار با اپراتور است و ثبت دلیل الزامی است."}
+            </p>
 
             {manualMode && (
               <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
@@ -811,6 +916,8 @@ export function StockInForm({
               {scannerStatus === "success" && "بارکد با موفقیت خوانده شد."}
               {scannerStatus === "error" &&
                 "اسکنر در دسترس نیست؛ دسترسی دوربین را بررسی کنید."}
+              {scannerStatus === "unknown" && "بارکد ناشناس ثبت شد؛ از صف بارکدهای ناشناس پیگیری کنید."}
+              {scannerStatus === "duplicate" && "اسکن تکراری بارکد ناشناس نادیده گرفته شد."}
               {scannerStatus === "idle" &&
                 "برای اسکن بارکد، دوربین را فعال کنید."}
             </p>
@@ -974,9 +1081,14 @@ export function StockInForm({
           </div>
 
           <div className="hidden md:block">
+            <p className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock3 className="size-3" />
+              آخرین زمان پایدار: {lastStableAt ? new Date(lastStableAt).toLocaleTimeString() : "-"}
+              {!manualMode && isCapturedMeasurementStale && " · وزن کپچر شده قدیمی است"}
+            </p>
             <Button
               type="submit"
-              disabled={isSubmitDisabled}
+              disabled={isSubmitDisabled || (!manualMode && isCapturedMeasurementStale)}
               className="w-full"
               aria-busy={isLoading}
             >
@@ -997,9 +1109,13 @@ export function StockInForm({
           </div>
 
           <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden">
+            <p className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock3 className="size-3" />
+              آخرین زمان پایدار: {lastStableAt ? new Date(lastStableAt).toLocaleTimeString() : "-"}
+            </p>
             <Button
               type="submit"
-              disabled={isSubmitDisabled}
+              disabled={isSubmitDisabled || (!manualMode && isCapturedMeasurementStale)}
               className="w-full"
               aria-busy={isLoading}
             >
@@ -1020,6 +1136,36 @@ export function StockInForm({
           </div>
         </form>
       </CardContent>
+
+      <Dialog open={isPrintPreviewOpen} onOpenChange={setIsPrintPreviewOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>پیش‌نمایش چاپ لیبل</DialogTitle>
+            <DialogDescription>
+              پیش از باز شدن پنجره چاپ، خروجی را بررسی کنید.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="h-[420px] overflow-hidden rounded border">
+            {pendingPrintHtml ? (
+              <iframe title="print-preview" className="size-full" srcDoc={pendingPrintHtml} />
+            ) : (
+              <div className="flex size-full items-center justify-center text-sm text-muted-foreground">پیش‌نمایشی در دسترس نیست.</div>
+            )}
+          </div>
+          {isPopupBlocked && (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Popup blocker فعال است. دسترسی popup را باز کنید و دوباره روی چاپ بزنید.
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsPrintPreviewOpen(false)}>بستن</Button>
+            <Button type="button" onClick={executePrint} disabled={isPreparingPrint}>
+              <ExternalLink className="ml-1 size-4" />
+              چاپ در پنجره جدید
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
