@@ -15,6 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -23,11 +24,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ArrowUpDown,
   Edit,
   Trash2,
   AlertTriangle,
   PackageSearch,
   FilterX,
+  Archive,
+  Download,
+  SlidersHorizontal,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -43,6 +48,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+type SortKey = "stock" | "minStock" | "category" | "latestMovement";
+type SortDir = "asc" | "desc";
+
 interface Product {
   id: string;
   name: string;
@@ -52,9 +60,12 @@ interface Product {
   unit: string;
   currentStock: number;
   minStock: number;
+  stockIns?: { createdAt: string | Date }[];
+  stockOuts?: { createdAt: string | Date }[];
   _count?: {
     stockIns: number;
     stockOuts: number;
+    warehouseBalances: number;
   };
   deleteRequestedAt?: string | Date | null;
   deleteCommitAfter?: string | Date | null;
@@ -82,11 +93,17 @@ export function ProductsTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [localProducts, setLocalProducts] = useState(products);
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({
+    key: "latestMovement",
+    dir: "desc",
+  });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setLocalProducts(products);
   }, [products]);
-
 
   const hasFilters = Boolean(search || (category && category !== "all"));
 
@@ -106,19 +123,138 @@ export function ProductsTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, category]);
 
+  const visibleProducts = useMemo(
+    () => localProducts.filter((product) => !hiddenIds.includes(product.id)),
+    [localProducts, hiddenIds]
+  );
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [localProducts.length, pageSize]);
+  }, [visibleProducts.length, pageSize]);
+
+  const getLatestMovementMs = (product: Product) => {
+    const latestIn = product.stockIns?.[0]?.createdAt
+      ? new Date(product.stockIns[0].createdAt).getTime()
+      : 0;
+    const latestOut = product.stockOuts?.[0]?.createdAt
+      ? new Date(product.stockOuts[0].createdAt).getTime()
+      : 0;
+    return Math.max(latestIn, latestOut);
+  };
+
+  const sortedProducts = useMemo(() => {
+    const factor = sort.dir === "asc" ? 1 : -1;
+    return [...visibleProducts].sort((a, b) => {
+      if (sort.key === "stock") {
+        return (Number(a.currentStock) - Number(b.currentStock)) * factor;
+      }
+      if (sort.key === "minStock") {
+        return (Number(a.minStock) - Number(b.minStock)) * factor;
+      }
+      if (sort.key === "category") {
+        return (a.category || "").localeCompare(b.category || "fa") * factor;
+      }
+      return (getLatestMovementMs(a) - getLatestMovementMs(b)) * factor;
+    });
+  }, [visibleProducts, sort]);
 
   const paginatedProducts = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return localProducts.slice(start, start + pageSize);
-  }, [localProducts, currentPage, pageSize]);
+    return sortedProducts.slice(start, start + pageSize);
+  }, [sortedProducts, currentPage, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(localProducts.length / pageSize));
-  const rangeStart =
-    localProducts.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const rangeEnd = Math.min(currentPage * pageSize, localProducts.length);
+  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / pageSize));
+  const rangeStart = sortedProducts.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const rangeEnd = Math.min(currentPage * pageSize, sortedProducts.length);
+
+  const selectedProducts = sortedProducts.filter((product) => selectedIds.includes(product.id));
+  const allVisibleSelected = paginatedProducts.length > 0 && paginatedProducts.every((product) => selectedIds.includes(product.id));
+
+  const toggleSort = (key: SortKey) => {
+    setSort((previous) => {
+      if (previous.key === key) {
+        return { key, dir: previous.dir === "asc" ? "desc" : "asc" };
+      }
+      return { key, dir: "desc" };
+    });
+  };
+
+  const exportSelection = () => {
+    const rows = (selectedProducts.length > 0 ? selectedProducts : sortedProducts).map((product) => {
+      const latestMovement = getLatestMovementMs(product)
+        ? new Date(getLatestMovementMs(product)).toLocaleString("fa-IR")
+        : "-";
+      return [
+        product.name,
+        product.sku || "",
+        product.barcode || "",
+        product.category || "",
+        String(product.currentStock),
+        String(product.minStock),
+        product.unit,
+        latestMovement,
+      ];
+    });
+
+    const csv = [
+      ["name", "sku", "barcode", "category", "stock", "min_stock", "unit", "latest_movement"],
+      ...rows,
+    ]
+      .map((line) => line.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `products-${Date.now()}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("خروجی CSV ایجاد شد.");
+  };
+
+  const adjustMinStockBatch = async () => {
+    if (selectedIds.length === 0) {
+      toast.error("ابتدا چند محصول را انتخاب کنید.");
+      return;
+    }
+
+    const value = window.prompt("حداقل موجودی جدید برای اقلام انتخاب‌شده را وارد کنید", "0");
+    if (value === null) return;
+
+    const parsed = Number(value);
+    if (Number.isNaN(parsed) || parsed < 0) {
+      toast.error("مقدار واردشده معتبر نیست.");
+      return;
+    }
+
+    const response = await fetch("/api/products/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "adjustMinStock", productIds: selectedIds, minStock: parsed }),
+    });
+
+    if (!response.ok) {
+      toast.error("به‌روزرسانی گروهی ناموفق بود.");
+      return;
+    }
+
+    setLocalProducts((previous) =>
+      previous.map((item) => (selectedIds.includes(item.id) ? { ...item, minStock: parsed } : item))
+    );
+    toast.success("حداقل موجودی محصولات انتخابی تغییر کرد.");
+  };
+
+  const archiveSelection = () => {
+    if (selectedIds.length === 0) {
+      toast.error("ابتدا چند محصول را انتخاب کنید.");
+      return;
+    }
+
+    setHiddenIds((previous) => Array.from(new Set([...previous, ...selectedIds])));
+    setSelectedIds([]);
+    toast.success("اقلام انتخابی از لیست فعلی مخفی شدند.");
+  };
 
   const handleDelete = async (product: Product) => {
     try {
@@ -230,11 +366,23 @@ export function ProductsTable({
         )}
       </div>
 
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
         <span>
-          نمایش {rangeStart}–{rangeEnd} از {localProducts.length}
+          نمایش {rangeStart}–{rangeEnd} از {sortedProducts.length}
         </span>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={exportSelection}>
+            <Download className="size-4 ml-1" />
+            خروجی
+          </Button>
+          <Button size="sm" variant="outline" onClick={adjustMinStockBatch}>
+            <SlidersHorizontal className="size-4 ml-1" />
+            تنظیم حداقل موجودی
+          </Button>
+          <Button size="sm" variant="outline" onClick={archiveSelection}>
+            <Archive className="size-4 ml-1" />
+            آرشیو/مخفی
+          </Button>
           <span>تعداد در صفحه</span>
           <Select
             value={String(pageSize)}
@@ -258,36 +406,58 @@ export function ProductsTable({
         <Table className="hidden md:table">
           <TableHeader>
             <TableRow>
+              <TableHead className="sticky top-0 z-20 bg-background w-[44px]">
+                <Checkbox
+                  checked={allVisibleSelected}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setSelectedIds((previous) =>
+                        Array.from(new Set([...previous, ...paginatedProducts.map((product) => product.id)]))
+                      );
+                    } else {
+                      setSelectedIds((previous) =>
+                        previous.filter((id) => !paginatedProducts.some((product) => product.id === id))
+                      );
+                    }
+                  }}
+                  aria-label="انتخاب همه"
+                />
+              </TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background">نام محصول</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background">کد محصول</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background">بارکد</TableHead>
               <TableHead className="sticky top-0 z-20 bg-background">
-                نام محصول
+                <Button variant="ghost" size="sm" onClick={() => toggleSort("category")}>
+                  دسته‌بندی
+                  <ArrowUpDown className="size-3 mr-1" />
+                </Button>
               </TableHead>
               <TableHead className="sticky top-0 z-20 bg-background">
-                کد محصول
+                <Button variant="ghost" size="sm" onClick={() => toggleSort("stock")}>
+                  موجودی
+                  <ArrowUpDown className="size-3 mr-1" />
+                </Button>
+              </TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background">واحد</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background">
+                <Button variant="ghost" size="sm" onClick={() => toggleSort("minStock")}>
+                  حداقل موجودی
+                  <ArrowUpDown className="size-3 mr-1" />
+                </Button>
               </TableHead>
               <TableHead className="sticky top-0 z-20 bg-background">
-                بارکد
+                <Button variant="ghost" size="sm" onClick={() => toggleSort("latestMovement")}>
+                  آخرین گردش
+                  <ArrowUpDown className="size-3 mr-1" />
+                </Button>
               </TableHead>
-              <TableHead className="sticky top-0 z-20 bg-background">
-                دسته‌بندی
-              </TableHead>
-              <TableHead className="sticky top-0 z-20 bg-background">
-                موجودی
-              </TableHead>
-              <TableHead className="sticky top-0 z-20 bg-background">
-                واحد
-              </TableHead>
-              <TableHead className="sticky top-0 z-20 bg-background">
-                موقعیت
-              </TableHead>
-              <TableHead className="sticky top-0 z-20 bg-background text-center">
-                عملیات
-              </TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background text-center sticky right-0">عملیات</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {localProducts.length === 0 ? (
+            {sortedProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-12">
+                <TableCell colSpan={10} className="py-12">
                   <div className="flex flex-col items-center justify-center gap-3 text-center">
                     <PackageSearch className="size-10 text-muted-foreground" />
                     <p className="font-medium">
@@ -300,22 +470,6 @@ export function ProductsTable({
                         ? "فیلترها را پاک کنید یا عبارت جستجو را تغییر دهید."
                         : "با افزودن اولین محصول، مدیریت موجودی را شروع کنید."}
                     </p>
-                    {hasFilters ? (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setSearch("");
-                          setCategory("all");
-                          router.push("/dashboard/products");
-                        }}
-                      >
-                        پاک کردن فیلترها
-                      </Button>
-                    ) : (
-                      <Link href="/dashboard/products/new">
-                        <Button>افزودن محصول</Button>
-                      </Link>
-                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -323,11 +477,27 @@ export function ProductsTable({
               paginatedProducts.map((product) => {
                 const relatedRecords =
                   (product._count?.stockIns ?? 0) +
-                  (product._count?.stockOuts ?? 0);
+                  (product._count?.stockOuts ?? 0) +
+                  (product._count?.warehouseBalances ?? 0);
+
+                const latestMovementMs = getLatestMovementMs(product);
 
                 return (
                   <TableRow key={product.id}>
-                    <TableCell className="font-medium sticky left-0 z-10 bg-background">
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.includes(product.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedIds((previous) =>
+                            checked
+                              ? Array.from(new Set([...previous, product.id]))
+                              : previous.filter((id) => id !== product.id)
+                          );
+                        }}
+                        aria-label={`انتخاب ${product.name}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         {product.name}
                         {isPendingDelete(product) && <Badge variant="outline">در انتظار حذف</Badge>}
@@ -357,18 +527,9 @@ export function ProductsTable({
                       </Badge>
                     </TableCell>
                     <TableCell>{product.unit}</TableCell>
-                    <TableCell>
-                      <span
-                        className={
-                          isLowStock(product)
-                            ? "text-amber-700 dark:text-amber-300 font-medium"
-                            : "text-emerald-700 dark:text-emerald-300 font-medium"
-                        }
-                      >
-                        {isLowStock(product) ? "کم‌موجودی" : "عادی"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
+                    <TableCell>{Number(product.minStock).toFixed(2)}</TableCell>
+                    <TableCell>{latestMovementMs ? new Date(latestMovementMs).toLocaleString("fa-IR") : "-"}</TableCell>
+                    <TableCell className="sticky right-0 bg-background">
                       <div className="flex items-center justify-center gap-2 border-r pr-2">
                         <Link href={`/dashboard/products/${product.id}/edit`}>
                           <Button
@@ -396,31 +557,41 @@ export function ProductsTable({
                             <AlertDialogHeader>
                               <AlertDialogTitle>حذف محصول</AlertDialogTitle>
                               <AlertDialogDescription className="space-y-2">
-                                <span className="block">
-                                  این عمل غیرقابل بازگشت است.
-                                </span>
-                                <span className="block">
-                                  نام محصول: <strong>{product.name}</strong>
-                                </span>
-                                <span className="block">
-                                  کد محصول:{" "}
-                                  <strong>{product.sku || "-"}</strong>
+                                <span className="block">این عمل غیرقابل بازگشت است.</span>
+                                <span className="block">نام محصول: <strong>{product.name}</strong></span>
+                                <span className="block">کد محصول: <strong>{product.sku || "-"}</strong></span>
+                                <span className="block font-medium text-amber-600 dark:text-amber-400">
+                                  وابستگی‌ها: {product._count?.stockIns ?? 0} ورودی، {product._count?.stockOuts ?? 0} خروج، {product._count?.warehouseBalances ?? 0} موجودی انبار
                                 </span>
                                 {relatedRecords > 0 && (
-                                  <span className="block text-amber-600 dark:text-amber-400">
-                                    هشدار: این محصول{" "}
-                                    {product._count?.stockIns ?? 0} ورود و{" "}
-                                    {product._count?.stockOuts ?? 0} خروج
-                                    ثبت‌شده دارد.
+                                  <span className="block text-muted-foreground">
+                                    پیشنهاد ایمن‌تر: به‌جای حذف دائمی، از گزینه «آرشیو/مخفی» در بالای جدول استفاده کنید.
                                   </span>
                                 )}
+                                <div className="space-y-1">
+                                  <span className="block">برای حذف دائمی، نام محصول را تایپ کنید:</span>
+                                  <Input
+                                    value={deleteConfirm[product.id] || ""}
+                                    onChange={(event) =>
+                                      setDeleteConfirm((previous) => ({ ...previous, [product.id]: event.target.value }))
+                                    }
+                                    placeholder={product.name}
+                                  />
+                                </div>
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>انصراف</AlertDialogCancel>
                               <AlertDialogAction
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                onClick={() => handleDelete(product)}
+                                onClick={(event) => {
+                                  if ((deleteConfirm[product.id] || "").trim() !== product.name) {
+                                    event.preventDefault();
+                                    toast.error("برای حذف دائمی باید نام محصول دقیقاً وارد شود.");
+                                    return;
+                                  }
+                                  void handleDelete(product);
+                                }}
                                 disabled={isPendingDelete(product)}
                               >
                                 {isPendingDelete(product) ? "حذف زمان‌بندی شده" : "حذف دائمی"}
@@ -441,179 +612,9 @@ export function ProductsTable({
             )}
           </TableBody>
         </Table>
-
-        <div className="space-y-3 p-3 md:hidden">
-          {localProducts.length === 0 ? (
-            <div className="rounded-lg border p-6">
-              <div className="flex flex-col items-center justify-center gap-3 text-center">
-                <PackageSearch className="size-10 text-muted-foreground" />
-                <p className="font-medium">
-                  {hasFilters
-                    ? "نتیجه‌ای با این فیلترها پیدا نشد"
-                    : "هنوز محصولی ثبت نشده است"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {hasFilters
-                    ? "فیلترها را پاک کنید یا عبارت جستجو را تغییر دهید."
-                    : "با افزودن اولین محصول، مدیریت موجودی را شروع کنید."}
-                </p>
-                {hasFilters ? (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setSearch("");
-                      setCategory("all");
-                      router.push("/dashboard/products");
-                    }}
-                  >
-                    پاک کردن فیلترها
-                  </Button>
-                ) : (
-                  <Link href="/dashboard/products/new">
-                    <Button>افزودن محصول</Button>
-                  </Link>
-                )}
-              </div>
-            </div>
-          ) : (
-            paginatedProducts.map((product) => {
-              const relatedRecords =
-                (product._count?.stockIns ?? 0) +
-                (product._count?.stockOuts ?? 0);
-
-              return (
-                <div
-                  key={product.id}
-                  className="rounded-lg border p-4 space-y-3 transition-colors hover:bg-muted/40"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="font-semibold flex items-center gap-2 text-base">
-                          {product.name}
-                          {isPendingDelete(product) && <Badge variant="outline">در انتظار حذف</Badge>}
-                          {isLowStock(product) && (
-                            <AlertTriangle className="size-4 text-orange-600" />
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {product.sku
-                            ? `کد محصول: ${product.sku}`
-                            : "کد محصول ثبت نشده"}
-                        </p>
-                      </div>
-                      <Badge
-                        variant={
-                          isLowStock(product) ? "destructive" : "default"
-                        }
-                        className="text-sm px-3 py-1"
-                      >
-                        {Number(product.currentStock).toFixed(2)} {product.unit}
-                      </Badge>
-                    </div>
-
-                    <div className="rounded-md border border-dashed bg-muted/30 p-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          وضعیت موجودی
-                        </span>
-                        <span
-                          className={
-                            isLowStock(product)
-                              ? "text-amber-700 dark:text-amber-300 font-semibold"
-                              : "text-emerald-700 dark:text-emerald-300 font-semibold"
-                          }
-                        >
-                          {isLowStock(product) ? "کم‌موجودی" : "عادی"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-                      <span className="text-muted-foreground">بارکد</span>
-                      <span dir="ltr" className="text-right">
-                        {product.barcode || "-"}
-                      </span>
-                      <span className="text-muted-foreground">دسته‌بندی</span>
-                      <span>
-                        {product.category ? (
-                          <Badge variant="secondary">{product.category}</Badge>
-                        ) : (
-                          "-"
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-dashed">
-                    <Link href={`/dashboard/products/${product.id}/edit`}>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-11"
-                        aria-label={`ویرایش ${product.name}`}
-                      >
-                        <Edit className="size-4" />
-                      </Button>
-                    </Link>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="size-11 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-                          aria-label={`حذف ${product.name}`}
-                          disabled={isPendingDelete(product)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>حذف محصول</AlertDialogTitle>
-                          <AlertDialogDescription className="space-y-2">
-                            <span className="block">
-                              این عمل غیرقابل بازگشت است.
-                            </span>
-                            <span className="block">
-                              نام محصول: <strong>{product.name}</strong>
-                            </span>
-                            <span className="block">
-                              کد محصول: <strong>{product.sku || "-"}</strong>
-                            </span>
-                            {relatedRecords > 0 && (
-                              <span className="block text-amber-600 dark:text-amber-400">
-                                هشدار: این محصول {product._count?.stockIns ?? 0}{" "}
-                                ورود و {product._count?.stockOuts ?? 0} خروج
-                                ثبت‌شده دارد.
-                              </span>
-                            )}
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>انصراف</AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            onClick={() => handleDelete(product)}
-                          >
-                            حذف دائمی
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                    {isPendingDelete(product) && (
-                      <Button variant="secondary" size="sm" onClick={() => recoverDelete(product)}>
-                        بازیابی حذف
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
       </div>
 
-      {localProducts.length > 0 && (
+      {sortedProducts.length > 0 && (
         <div className="flex items-center justify-end gap-2">
           <Button
             variant="outline"
