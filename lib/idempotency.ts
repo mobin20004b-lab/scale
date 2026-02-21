@@ -2,11 +2,47 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+const IDEMPOTENCY_POLL_INTERVAL_MS = 100;
+const IDEMPOTENCY_PROCESSING_WAIT_MS = 5000;
 
 type IdempotentResponse = {
   status: number;
   body: unknown;
 };
+
+async function waitForCompletedOperation(
+  endpoint: string,
+  key: string,
+  now: Date,
+): Promise<IdempotentResponse | null> {
+  const timeoutAt = Date.now() + IDEMPOTENCY_PROCESSING_WAIT_MS;
+
+  while (Date.now() < timeoutAt) {
+    await new Promise((resolve) => setTimeout(resolve, IDEMPOTENCY_POLL_INTERVAL_MS));
+
+    const existing = await prisma.idempotencyRecord.findUnique({
+      where: {
+        key_endpoint: {
+          key,
+          endpoint,
+        },
+      },
+    });
+
+    if (!existing || existing.expiresAt <= now) {
+      return null;
+    }
+
+    if (existing.responseStatus !== 0) {
+      return {
+        status: existing.responseStatus,
+        body: existing.responseBody,
+      };
+    }
+  }
+
+  return null;
+}
 
 export async function runIdempotentOperation(
   endpoint: string,
@@ -48,6 +84,11 @@ export async function runIdempotentOperation(
       }
 
       if (existing.responseStatus === 0) {
+        const completed = await waitForCompletedOperation(endpoint, key, now);
+        if (completed) {
+          return completed;
+        }
+
         return {
           status: 409,
           body: {
