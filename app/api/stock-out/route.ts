@@ -8,8 +8,6 @@ import {
   decrementWarehouseInventory,
   InventoryConflictError,
 } from "@/lib/inventory-ledger";
-import { resolveMovementQuantityAndWeight } from "@/lib/movement-metrics";
-import { getWarehouseAvailableQuantity } from "@/lib/warehouse-stock";
 
 export async function POST(request: Request) {
   try {
@@ -20,46 +18,46 @@ export async function POST(request: Request) {
 
     const parsed = stockOutPayloadSchema.parse(await request.json());
 
-    const warehouse = await prisma.warehouse.findUnique({
-      where: { id: parsed.warehouseId },
+    const stockIn = await prisma.stockIn.findUnique({
+      where: { id: parsed.stockInId },
     });
-    if (!warehouse) {
+
+    if (!stockIn) {
+      return NextResponse.json({ error: "Entry lot not found" }, { status: 404 });
+    }
+
+    if (stockIn.productId !== parsed.productId || stockIn.warehouseId !== parsed.warehouseId) {
       return NextResponse.json(
-        { error: "Warehouse not found" },
-        { status: 404 }
+        { error: "Selected entry lot does not belong to selected product/warehouse" },
+        { status: 400 }
       );
     }
 
-    const product = await prisma.product.findUnique({
-      where: { id: parsed.productId },
+    const existingStockOut = await prisma.stockOut.findFirst({
+      where: { stockInId: parsed.stockInId },
     });
-    if (!product) {
-      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+
+    if (existingStockOut) {
+      return NextResponse.json({ error: "Selected entry lot has already been exited" }, { status: 409 });
     }
 
-    const movement = resolveMovementQuantityAndWeight(product, parsed.quantity);
+    const [warehouse, product] = await Promise.all([
+      prisma.warehouse.findUnique({ where: { id: parsed.warehouseId } }),
+      prisma.product.findUnique({ where: { id: parsed.productId } }),
+    ]);
+
+    if (!warehouse || !product) {
+      return NextResponse.json({ error: "Warehouse or product not found" }, { status: 404 });
+    }
 
     const stockOut = await prisma.$transaction(async (tx) => {
-      const availableBeforeCommit = await getWarehouseAvailableQuantity(tx, {
-        productId: parsed.productId,
-        warehouseId: parsed.warehouseId,
-      });
-
-      if (availableBeforeCommit < parsed.quantity) {
-        throw new InventoryConflictError(
-          `Requested quantity exceeds warehouse balance. Available now: ${availableBeforeCommit}`
-        );
-      }
-
       const createdStockOut = await tx.stockOut.create({
         data: {
           productId: parsed.productId,
+          stockInId: parsed.stockInId,
           userId: (session.user as any).id,
-          quantity: movement.quantity,
-          weight: movement.weight,
-          customer: parsed.customer,
-          invoiceNumber: parsed.invoiceNumber,
-          notes: parsed.notes,
+          quantity: stockIn.quantity,
+          weight: stockIn.weight,
           warehouseId: parsed.warehouseId,
         },
       });
@@ -67,9 +65,9 @@ export async function POST(request: Request) {
       await decrementWarehouseInventory(tx, {
         productId: parsed.productId,
         warehouseId: parsed.warehouseId,
-        quantity: parsed.quantity,
+        quantity: stockIn.quantity,
+        lotBatch: stockIn.lotBatch,
         stockOutId: createdStockOut.id,
-        notes: parsed.notes,
       });
 
       await tx.activity.create({
@@ -78,7 +76,7 @@ export async function POST(request: Request) {
           action: "خروج کالا",
           entity: "StockOut",
           entityId: createdStockOut.id,
-          details: `${parsed.quantity} ${product.unit} از "${product.name}" از انبار "${warehouse.name}" خارج شد`,
+          details: `${stockIn.quantity} ${product.unit} از "${product.name}" از انبار "${warehouse.name}" خارج شد (lot: ${stockIn.lotBatch})`,
         },
       });
 

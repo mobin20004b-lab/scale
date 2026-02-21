@@ -8,7 +8,6 @@ import {
   decrementWarehouseInventory,
   InventoryConflictError,
 } from "@/lib/inventory-ledger";
-import { resolveMovementQuantityAndWeight } from "@/lib/movement-metrics";
 import { requireExternalApiAuth } from "@/lib/external-api-auth";
 
 export async function POST(request: Request) {
@@ -54,21 +53,17 @@ export async function POST(request: Request) {
         }
 
         try {
-          const movement = resolveMovementQuantityAndWeight(
-            product,
-            parsed.quantity
-          );
+          const stockIn = await prisma.stockIn.findUnique({ where: { id: parsed.stockInId } });
+          if (!stockIn) return { status: 404, body: { error: "Entry lot not found" } };
 
           const stockOut = await prisma.$transaction(async (tx) => {
             const createdStockOut = await tx.stockOut.create({
               data: {
                 productId: parsed.productId,
                 userId: systemUser.id,
-                quantity: movement.quantity,
-                weight: movement.weight,
-                customer: parsed.customer,
-                invoiceNumber: parsed.invoiceNumber,
-                notes: parsed.notes,
+                quantity: stockIn.quantity,
+                weight: stockIn.weight,
+                stockInId: parsed.stockInId,
                 warehouseId: parsed.warehouseId,
               },
             });
@@ -76,9 +71,9 @@ export async function POST(request: Request) {
             await decrementWarehouseInventory(tx, {
               productId: parsed.productId,
               warehouseId: parsed.warehouseId,
-              quantity: parsed.quantity,
+              quantity: stockIn.quantity,
+              lotBatch: stockIn.lotBatch,
               stockOutId: createdStockOut.id,
-              notes: parsed.notes,
             });
 
             await tx.activity.create({
@@ -87,7 +82,7 @@ export async function POST(request: Request) {
                 action: "خروج کالا (API)",
                 entity: "StockOut",
                 entityId: createdStockOut.id,
-                details: `${parsed.quantity} ${product.unit} از "${product.name}" از طریق API خارج شد`,
+                details: `${stockIn.quantity} ${product.unit} از "${product.name}" از طریق API خارج شد`,
               },
             });
 

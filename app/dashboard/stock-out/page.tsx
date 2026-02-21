@@ -25,6 +25,7 @@ export default async function StockOutPage({
       orderBy: { createdAt: "desc" },
       include: {
         product: true,
+        stockIn: { select: { lotBatch: true } },
         user: {
           select: {
             full_name: true,

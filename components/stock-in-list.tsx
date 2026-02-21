@@ -13,8 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 interface StockIn {
   id: string;
   quantity: number;
-  supplier: string | null;
-  invoiceNumber: string | null;
+  lotBatch: string;
   createdAt: Date;
   lotBatch?: string | null;
   product: {
@@ -119,20 +118,6 @@ export function StockInList({ stockIns, highlightId }: StockInListProps) {
                         {stockIn.warehouse.name}
                       </span>
                     </div>
-                  )}
-
-                  {stockIn.supplier && (
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">تامین‌کننده:</span>{" "}
-                      {stockIn.supplier}
-                    </p>
-                  )}
-
-                  {stockIn.invoiceNumber && (
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">شماره فاکتور:</span>{" "}
-                      {stockIn.invoiceNumber}
-                    </p>
                   )}
 
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">

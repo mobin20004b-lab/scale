@@ -27,8 +27,6 @@ import { useRouter } from "next/navigation";
 interface StockIn {
   id: string;
   quantity: number;
-  supplier: string | null;
-  invoiceNumber: string | null;
   createdAt: Date;
   product: {
     name: string;
@@ -42,8 +40,6 @@ interface StockIn {
 interface StockOut {
   id: string;
   quantity: number;
-  customer: string | null;
-  invoiceNumber: string | null;
   createdAt: Date;
   product: {
     name: string;
@@ -75,8 +71,6 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
           product: item.product.name,
           unit: item.product.unit,
           quantity: Number(item.quantity),
-          party: item.supplier || "-",
-          reference: item.invoiceNumber || "-",
           user: item.user.full_name,
           date: new Date(item.createdAt),
         })),
@@ -86,8 +80,6 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
           product: item.product.name,
           unit: item.product.unit,
           quantity: Number(item.quantity),
-          party: item.customer || "-",
-          reference: item.invoiceNumber || "-",
           user: item.user.full_name,
           date: new Date(item.createdAt),
         })),
@@ -159,12 +151,6 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
                   مقدار
                 </TableHead>
                 <TableHead className="sticky top-0 z-20 bg-background">
-                  طرف معامله
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 bg-background">
-                  شماره مرجع
-                </TableHead>
-                <TableHead className="sticky top-0 z-20 bg-background">
                   کاربر
                 </TableHead>
               </TableRow>
@@ -172,7 +158,7 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
             <TableBody>
               {transactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-12">
+                  <TableCell colSpan={5} className="py-12">
                     <EmptyStatePanel
                       title="تراکنشی با فیلترهای فعلی یافت نشد"
                       description="برای مشاهده داده‌ها، فیلترها را پاک کنید."
@@ -209,11 +195,7 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
                         {transaction.quantity.toFixed(2)} {transaction.unit}
                       </Badge>
                     </TableCell>
-                    <TableCell>{transaction.party}</TableCell>
-                    <TableCell dir="ltr" className="text-right">
-                      {transaction.reference}
-                    </TableCell>
-                    <TableCell>{transaction.user}</TableCell>
+                                        <TableCell>{transaction.user}</TableCell>
                   </TableRow>
                 ))
               )}
@@ -259,12 +241,6 @@ export function ReportsTable({ stockIns, stockOuts }: ReportsTableProps) {
                         {transaction.type === "in" ? "+" : "-"}
                         {transaction.quantity.toFixed(2)} {transaction.unit}
                       </Badge>
-                    </span>
-                    <span className="text-muted-foreground">طرف معامله</span>
-                    <span>{transaction.party}</span>
-                    <span className="text-muted-foreground">شماره مرجع</span>
-                    <span dir="ltr" className="text-right">
-                      {transaction.reference}
                     </span>
                     <span className="text-muted-foreground">کاربر</span>
                     <span>{transaction.user}</span>

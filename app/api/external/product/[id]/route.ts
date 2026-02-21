@@ -23,7 +23,7 @@ export async function GET(
           select: {
             id: true,
             quantity: true,
-            supplier: true,
+            lotBatch: true,
             createdAt: true
           }
         },
@@ -33,7 +33,7 @@ export async function GET(
           select: {
             id: true,
             quantity: true,
-            customer: true,
+            stockIn: { select: { lotBatch: true } },
             createdAt: true
           }
         }

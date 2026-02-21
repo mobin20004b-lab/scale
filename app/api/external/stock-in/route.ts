@@ -36,9 +36,10 @@ export async function POST(request: Request) {
       "external-stock-in",
       idempotencyKey,
       async () => {
+        const warehouseId = parsed.warehouseId;
         const [product, warehouse] = await Promise.all([
           prisma.product.findUnique({ where: { id: parsed.productId } }),
-          prisma.warehouse.findUnique({ where: { id: parsed.warehouseId } }),
+          prisma.warehouse.findUnique({ where: { id: warehouseId } }),
         ]);
 
         if (!product) {
@@ -63,27 +64,24 @@ export async function POST(request: Request) {
         );
 
         const stockIn = await prisma.$transaction(async (tx) => {
+          const createdLotBatch = `ENTRY-${Date.now()}`;
           const createdStockIn = await tx.stockIn.create({
             data: {
               productId: parsed.productId,
               userId: systemUser.id,
               quantity: movement.quantity,
               weight: movement.weight,
-              supplier: parsed.supplier,
-              invoiceNumber: parsed.invoiceNumber,
-              notes: parsed.notes,
-              warehouseId: parsed.warehouseId,
-              lotBatch: parsed.lotBatch,
+              warehouseId: warehouseId,
+              lotBatch: createdLotBatch,
             },
           });
 
           await incrementWarehouseInventory(tx, {
             productId: parsed.productId,
-            warehouseId: parsed.warehouseId,
+            warehouseId: warehouseId,
             quantity: parsed.quantity,
-            lotBatch: parsed.lotBatch,
+            lotBatch: createdLotBatch,
             stockInId: createdStockIn.id,
-            notes: parsed.notes,
           });
 
           await tx.activity.create({

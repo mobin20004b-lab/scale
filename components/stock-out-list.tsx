@@ -11,8 +11,9 @@ import { EmptyStatePanel } from "@/components/ui/async-state";
 interface StockOut {
   id: string;
   quantity: number;
-  customer: string | null;
-  invoiceNumber: string | null;
+  stockIn: {
+    lotBatch: string;
+  };
   createdAt: Date;
   product: {
     name: string;
@@ -72,6 +73,8 @@ export function StockOutList({ stockOuts, highlightId }: StockOutListProps) {
                     </Badge>
                   </div>
 
+                  <p className="text-sm text-muted-foreground"><span className="font-medium">لات خروجی:</span> {stockOut.stockIn.lotBatch}</p>
+
                   <div className="rounded-md border border-dashed bg-muted/30 px-2 py-1.5 text-sm">
                     <span className="text-muted-foreground">وضعیت: </span>
                     <span className="font-medium text-amber-700 dark:text-amber-300">
@@ -79,19 +82,7 @@ export function StockOutList({ stockOuts, highlightId }: StockOutListProps) {
                     </span>
                   </div>
 
-                  {stockOut.customer && (
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">مشتری:</span>{" "}
-                      {stockOut.customer}
-                    </p>
-                  )}
-
-                  {stockOut.invoiceNumber && (
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">شماره فاکتور:</span>{" "}
-                      {stockOut.invoiceNumber}
-                    </p>
-                  )}
+                  <p className="text-sm text-muted-foreground"><span className="font-medium">لات خروجی:</span> {stockOut.stockIn.lotBatch}</p>
 
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
                     <Button type="button" variant="ghost" size="sm" onClick={() => window.print()}><Printer className="size-3.5 ml-1" />چاپ مجدد لیبل</Button>
