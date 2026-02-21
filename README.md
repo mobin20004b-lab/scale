@@ -29,7 +29,16 @@ DATABASE_URL="your_neon_database_url"
 NEXTAUTH_SECRET="generate_a_random_secret"
 NEXTAUTH_URL="http://localhost:3000"
 API_SECRET_KEY="your_api_key_for_external_endpoints"
+NEXT_PUBLIC_SHOW_DEV_LOGIN_HINT="false"
 ```
+
+### Login Credential Hint Policy (Audit Note)
+
+- The login UI must **not** expose default credentials in production.
+- A local-only demo credential hint can be shown only when both conditions are true:
+  - `NODE_ENV !== "production"`
+  - `NEXT_PUBLIC_SHOW_DEV_LOGIN_HINT="true"`
+- Recommended local development behavior is to keep `NEXT_PUBLIC_SHOW_DEV_LOGIN_HINT` disabled by default and share temporary test credentials through secure internal channels.
 
 ### Database Setup
 
