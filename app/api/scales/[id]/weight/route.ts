@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { scaleLiveHub } from "@/lib/scale-live-hub";
 
 export async function GET(
   request: Request,
@@ -71,13 +72,24 @@ export async function POST(
       return NextResponse.json({ error: "Invalid weight" }, { status: 400 });
     }
 
-    await prisma.scale.update({
+    const updatedScale = await prisma.scale.update({
       where: { id },
+      select: {
+        id: true,
+        isActive: true,
+        lastWeight: true,
+        lastWeightAt: true,
+        tare: true,
+        unit: true,
+        precision: true,
+      },
       data: {
         lastWeight: weight,
         lastWeightAt: new Date(),
       },
     });
+
+    scaleLiveHub.publish(updatedScale);
 
     return NextResponse.json({ success: true, weight });
   } catch (error) {
