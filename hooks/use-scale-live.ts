@@ -11,6 +11,7 @@ export interface ScaleLiveState {
   tare: number;
   unit: string;
   precision: number;
+  heartbeatIntervalSec: number;
   health: ScaleHealth;
   lastReadingAgeMs: number | null;
 }
@@ -110,7 +111,9 @@ export function useScaleLive(
 
         const next: Record<string, ScaleLiveState> = {};
         payload.forEach((scale) => {
-          const snapshot = getScaleHealthSnapshot(scale.lastWeightAt);
+          const snapshot = getScaleHealthSnapshot(scale.lastWeightAt, {
+            heartbeatIntervalSec: scale.heartbeatIntervalSec,
+          });
           next[scale.id] = {
             ...scale,
             health: snapshot.health,
@@ -131,7 +134,9 @@ export function useScaleLive(
           return;
         }
 
-        const snapshot = getScaleHealthSnapshot(payload.lastWeightAt);
+        const snapshot = getScaleHealthSnapshot(payload.lastWeightAt, {
+          heartbeatIntervalSec: payload.heartbeatIntervalSec,
+        });
 
         setScales((previous) => ({
           ...previous,

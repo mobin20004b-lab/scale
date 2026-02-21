@@ -8,6 +8,7 @@ export interface ScaleLiveUpdate {
   tare: number;
   unit: string;
   precision: number;
+  heartbeatIntervalSec: number;
   health: ScaleHealth;
   lastReadingAgeMs: number | null;
 }
@@ -40,7 +41,9 @@ class ScaleLiveHub {
   }
 
   publish(scaleUpdate: Omit<ScaleLiveUpdate, "health" | "lastReadingAgeMs">) {
-    const snapshot = getScaleHealthSnapshot(scaleUpdate.lastWeightAt);
+    const snapshot = getScaleHealthSnapshot(scaleUpdate.lastWeightAt, {
+      heartbeatIntervalSec: scaleUpdate.heartbeatIntervalSec,
+    });
     const payload: ScaleLiveUpdate = {
       ...scaleUpdate,
       health: snapshot.health,
