@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useScaleLive } from "@/hooks/use-scale-live";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -46,7 +47,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { DateTimeText } from "@/components/date-time-text";
-import { getScaleHealthSnapshot, ScaleHealth } from "@/lib/scale-health";
+import { getScaleHealthSnapshot } from "@/lib/scale-health";
 import { formatScaleWeight } from "@/lib/scale-reading";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -107,20 +108,6 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const [healthFilter, setHealthFilter] = useState("all");
   const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
-  const [liveWeights, setLiveWeights] = useState<
-    Record<
-      string,
-      {
-        lastWeight: number | null;
-        lastWeightAt: string | Date | null;
-        health: ScaleHealth;
-        lastReadingAgeMs: number | null;
-      }
-    >
-  >({});
-  const [isLoadingWeights, setIsLoadingWeights] = useState(false);
-  const [weightsError, setWeightsError] = useState<string | null>(null);
-  const [weightsRefreshKey, setWeightsRefreshKey] = useState(0);
   const [localScales, setLocalScales] = useState(scales);
   const [selectedScaleIds, setSelectedScaleIds] = useState<string[]>([]);
   const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
@@ -145,9 +132,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
 
   const visibleScales = useMemo(() => {
     return localScales.filter((scale) => {
-      const live = liveWeights[scale.id];
-      const health =
-        live?.health ?? getScaleHealthSnapshot(scale.lastWeightAt).health;
+      const health = getScaleHealthSnapshot(scale.lastWeightAt).health;
       const matchesSearch = scale.name
         .toLowerCase()
         .includes(search.trim().toLowerCase());
@@ -168,7 +153,6 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     warehouseFilter,
     statusFilter,
     healthFilter,
-    liveWeights,
   ]);
 
   const visibleScaleIds = useMemo(
@@ -176,112 +160,18 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     [visibleScales]
   );
 
-  useEffect(() => {
-    if (visibleScaleIds.length === 0) {
-      setLiveWeights({});
-      setWeightsError(null);
-      setIsLoadingWeights(false);
-      return;
-    }
+  const {
+    scales: liveScales,
+    isConnecting: isLoadingWeights,
+    isStale: areWeightsStale,
+    error: weightsError,
+    refresh: refreshWeights,
+  } = useScaleLive(visibleScaleIds);
 
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const getRefreshInterval = () =>
-      document.visibilityState === "visible" ? 1000 : 7000;
-
-    const fetchWeights = async ({ initialLoad = false } = {}) => {
-      if (initialLoad) {
-        setIsLoadingWeights(true);
-      }
-
-      let hasError = false;
-
-      try {
-        const params = new URLSearchParams({ ids: visibleScaleIds.join(",") });
-        const response = await fetch(`/api/scales/live?${params.toString()}`);
-        if (!response.ok) {
-          hasError = true;
-        } else {
-          const payload = (await response.json()) as {
-            scales: Array<{
-              id: string;
-              lastWeight: number | null;
-              lastWeightAt: string | null;
-              health: ScaleHealth;
-              lastReadingAgeMs: number | null;
-            }>;
-          };
-
-          if (!cancelled) {
-            const nextWeights: Record<
-              string,
-              {
-                lastWeight: number | null;
-                lastWeightAt: string | null;
-                health: ScaleHealth;
-                lastReadingAgeMs: number | null;
-              }
-            > = {};
-
-            payload.scales.forEach((scale) => {
-              nextWeights[scale.id] = {
-                lastWeight: scale.lastWeight,
-                lastWeightAt: scale.lastWeightAt,
-                health: scale.health,
-                lastReadingAgeMs: scale.lastReadingAgeMs,
-              };
-            });
-
-            setLiveWeights(nextWeights);
-          }
-        }
-      } catch {
-        hasError = true;
-      }
-
-      if (!cancelled) {
-        setWeightsError(
-          hasError
-            ? "بخشی از وزن‌های لحظه‌ای قابل دریافت نیست. اتصال شبکه یا وضعیت ترازوها را بررسی کنید."
-            : null
-        );
-        if (initialLoad) {
-          setIsLoadingWeights(false);
-        }
-      }
-    };
-
-    const scheduleNext = () => {
-      if (cancelled) {
-        return;
-      }
-
-      timer = setTimeout(async () => {
-        await fetchWeights();
-        scheduleNext();
-      }, getRefreshInterval());
-    };
-
-    const refreshNow = async () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-      await fetchWeights();
-      scheduleNext();
-    };
-
-    void fetchWeights({ initialLoad: true }).then(() => scheduleNext());
-    document.addEventListener("visibilitychange", refreshNow);
-
-    return () => {
-      cancelled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-      document.removeEventListener("visibilitychange", refreshNow);
-    };
-  }, [visibleScaleIds, weightsRefreshKey]);
+  const staleWeightsError =
+    areWeightsStale && !weightsError
+      ? "داده‌های وزن لحظه‌ای قدیمی شده‌اند. تلاش برای بازیابی اتصال ادامه دارد."
+      : null;
 
   const submitScale = async () => {
     try {
@@ -647,7 +537,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
         </div>
 
         {visibleScales.map((scale) => {
-          const live = liveWeights[scale.id];
+          const live = liveScales[scale.id];
           const lastWeight = live?.lastWeight ?? scale.lastWeight;
           const lastWeightAt = live?.lastWeightAt ?? scale.lastWeightAt;
           const health =
@@ -846,7 +736,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           </div>
         )}
 
-        {weightsError && (
+        {(weightsError || staleWeightsError) && (
           <Empty className="border border-amber-500/40 bg-amber-500/5 p-4 md:p-5">
             <EmptyHeader className="max-w-full">
               <EmptyMedia
@@ -858,13 +748,13 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
               <EmptyTitle className="text-base">
                 دریافت وزن لحظه‌ای با خطا مواجه شد
               </EmptyTitle>
-              <EmptyDescription>{weightsError}</EmptyDescription>
+              <EmptyDescription>{weightsError || staleWeightsError}</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setWeightsRefreshKey((prev) => prev + 1)}
+                onClick={refreshWeights}
               >
                 <RefreshCw className="size-4 ml-2" />
                 تلاش مجدد دریافت وزن

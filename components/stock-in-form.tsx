@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Loader2, RefreshCcw, Scan, Plus, TriangleAlert } from "lucide-react";
+import { useScaleLive } from "@/hooks/use-scale-live";
 import { BarcodeScanner } from "./barcode-scanner";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -74,9 +75,6 @@ export function StockInForm({
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [selectedScaleId, setSelectedScaleId] = useState<string>("");
   const [liveWeight, setLiveWeight] = useState<number | null>(null);
-  const [isFetchingWeight, setIsFetchingWeight] = useState(false);
-  const [weightError, setWeightError] = useState<string | null>(null);
-  const [weightRefreshKey, setWeightRefreshKey] = useState(0);
   const [scannerStatus, setScannerStatus] = useState<
     "idle" | "scanning" | "success" | "error"
   >("idle");
@@ -129,51 +127,22 @@ export function StockInForm({
     setSelectedProduct(product);
   }, [products, searchParams, setValue]);
 
+  const {
+    scales: liveScales,
+    isConnecting: isFetchingWeight,
+    isStale: isWeightStale,
+    error: weightError,
+    refresh: refreshWeight,
+  } = useScaleLive(selectedScaleId ? [selectedScaleId] : []);
+
   useEffect(() => {
     if (!selectedScaleId) {
       setLiveWeight(null);
-      setWeightError(null);
-      setIsFetchingWeight(false);
       return;
     }
 
-    let cancelled = false;
-
-    const fetchWeight = async ({ initialLoad = false } = {}) => {
-      if (initialLoad) {
-        setIsFetchingWeight(true);
-      }
-
-      try {
-        const response = await fetch(`/api/scales/${selectedScaleId}/weight`);
-        if (!response.ok) {
-          throw new Error();
-        }
-
-        const payload = await response.json();
-        if (!cancelled) {
-          setLiveWeight(payload.lastWeight ?? null);
-          setWeightError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setWeightError("ارتباط با ترازو برقرار نشد. دوباره تلاش کنید.");
-        }
-      } finally {
-        if (!cancelled && initialLoad) {
-          setIsFetchingWeight(false);
-        }
-      }
-    };
-
-    fetchWeight({ initialLoad: true });
-    const interval = setInterval(() => fetchWeight(), 1000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [selectedScaleId, weightRefreshKey]);
+    setLiveWeight(liveScales[selectedScaleId]?.lastWeight ?? null);
+  }, [liveScales, selectedScaleId]);
 
   const handleBarcodeScanned = (barcode: string) => {
     const product = products.find((p) => p.barcode === barcode);
@@ -321,7 +290,7 @@ export function StockInForm({
             <div className="space-y-3">
               {isFetchingWeight && <Skeleton className="h-14 w-full" />}
 
-              {weightError && (
+              {(weightError || isWeightStale) && (
                 <Empty className="gap-3 border border-destructive/40 bg-destructive/5 p-4">
                   <EmptyHeader className="max-w-full">
                     <EmptyMedia
@@ -333,13 +302,16 @@ export function StockInForm({
                     <EmptyTitle className="text-base">
                       خطا در دریافت وزن ترازو
                     </EmptyTitle>
-                    <EmptyDescription>{weightError}</EmptyDescription>
+                    <EmptyDescription>
+                      {weightError ||
+                        "داده وزن به‌روز نیست. اتصال لحظه‌ای ممکن است ناپایدار باشد."}
+                    </EmptyDescription>
                   </EmptyHeader>
                   <EmptyContent>
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setWeightRefreshKey((prev) => prev + 1)}
+                      onClick={refreshWeight}
                     >
                       <RefreshCcw className="size-4 ml-2" />
                       تلاش مجدد
