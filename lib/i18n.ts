@@ -1,5 +1,3 @@
-import { cookies } from "next/headers";
-
 export const SUPPORTED_LOCALES = ["fa", "en"] as const;
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
@@ -80,12 +78,6 @@ export function isSupportedLocale(locale: string): locale is Locale {
   return (SUPPORTED_LOCALES as readonly string[]).includes(locale);
 }
 
-export async function getSessionLocale(): Promise<Locale> {
-  const cookieStore = await cookies();
-  const localeCookie = cookieStore.get("locale")?.value;
-  if (localeCookie && isSupportedLocale(localeCookie)) return localeCookie;
-  return DEFAULT_LOCALE;
-}
 
 export function getDictionary(locale: Locale): TranslationDictionary {
   return dictionaries[locale] ?? dictionaries[DEFAULT_LOCALE];

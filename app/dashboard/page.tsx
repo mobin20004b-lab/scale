@@ -6,7 +6,8 @@ import { LowStockAlert } from "@/components/low-stock-alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { getDictionary, getSessionLocale } from "@/lib/i18n"
+import { getDictionary } from "@/lib/i18n"
+import { getSessionLocale } from "@/lib/i18n-server"
 
 type Trend = "up" | "down" | "flat"
 
