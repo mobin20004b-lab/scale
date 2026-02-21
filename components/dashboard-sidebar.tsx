@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent } from "react";
+import type { ComponentType, KeyboardEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -13,48 +13,69 @@ import {
   Settings,
   History,
   Weight,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  ScanSearch,
+  Shield,
+  Users,
+  Radio,
+  Printer,
+  Barcode,
 } from "lucide-react";
 
-const navItems = [
+interface NavItem {
+  title: string;
+  href?: string;
+  icon: ComponentType<{ className?: string }>;
+  badge?: string;
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+const navGroups: NavGroup[] = [
   {
-    title: "داشبورد",
-    href: "/dashboard",
-    icon: LayoutDashboard,
+    title: "عملیات روزانه",
+    items: [
+      { title: "خانه", href: "/dashboard", icon: LayoutDashboard },
+      { title: "دریافت", href: "/dashboard/stock-in", icon: ArrowDownToLine },
+      { title: "ارسال", href: "/dashboard/stock-out", icon: ArrowUpFromLine },
+      { title: "شمارش و اصلاح", href: "/dashboard/movements", icon: PackagePlus },
+    ],
   },
   {
-    title: "محصولات",
-    href: "/dashboard/products",
-    icon: Package,
+    title: "هوشمندی موجودی",
+    items: [
+      { title: "محصولات", href: "/dashboard/products", icon: Package },
+      { title: "انبارها و نواحی", href: "/dashboard/warehouses", icon: Warehouse },
+      { title: "ردیابی", href: "/dashboard/activity", icon: ScanSearch },
+    ],
   },
   {
-    title: "حرکت جدید",
-    href: "/dashboard/movements",
-    icon: PackagePlus,
+    title: "تجهیزات و اتوماسیون",
+    items: [
+      { title: "ناوگان ترازوها", href: "/dashboard/scales", icon: Weight },
+      { title: "چاپگرها و لیبل", href: "/dashboard/settings", icon: Printer, badge: "تنظیمات" },
+      { title: "صف نگاشت بارکد", href: "/dashboard/stock-in", icon: Barcode, badge: "ورودی" },
+    ],
   },
   {
-    title: "گزارش‌ها",
-    href: "/dashboard/reports",
-    icon: BarChart3,
+    title: "برج کنترل",
+    items: [
+      { title: "گزارش‌ها", href: "/dashboard/reports", icon: BarChart3 },
+      { title: "پایش زنده", href: "/dashboard/scales", icon: Radio, badge: "Live" },
+      { title: "ممیزی و فعالیت", href: "/dashboard/activity", icon: History },
+    ],
   },
   {
-    title: "انبارها",
-    href: "/dashboard/warehouses",
-    icon: Warehouse,
-  },
-  {
-    title: "ترازوها",
-    href: "/dashboard/scales",
-    icon: Weight,
-  },
-  {
-    title: "سوابق",
-    href: "/dashboard/activity",
-    icon: History,
-  },
-  {
-    title: "تنظیمات",
-    href: "/dashboard/settings",
-    icon: Settings,
+    title: "مدیریت",
+    items: [
+      { title: "کاربران و نقش‌ها", href: "/dashboard/settings", icon: Users },
+      { title: "امنیت و کلید API", href: "/dashboard/settings", icon: Shield },
+      { title: "تنظیمات سیستم", href: "/dashboard/settings", icon: Settings },
+    ],
   },
 ];
 
@@ -105,45 +126,56 @@ export function DashboardSidebar({
   };
 
   return (
-    <aside className={cn("flex flex-col w-64 border-l bg-card", className)}>
+    <aside className={cn("flex flex-col w-72 border-l bg-card", className)}>
       <div className="flex items-center gap-3 p-6 border-b">
         <div className="flex items-center justify-center size-10 rounded-lg bg-primary text-primary-foreground">
           <Warehouse className="size-5" />
         </div>
         <div className="flex flex-col">
           <span className="font-bold text-lg">انبارداری</span>
-          <span className="text-xs text-muted-foreground">مدیریت هوشمند</span>
+          <span className="text-xs text-muted-foreground">جریان کاری سازمانی</span>
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1" aria-label="ناوبری داشبورد">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href));
+      <nav className="flex-1 p-4 space-y-4 overflow-y-auto" aria-label="ناوبری داشبورد">
+        {navGroups.map((group) => (
+          <section key={group.title} className="space-y-1.5">
+            <h2 className="px-3 text-xs font-semibold text-muted-foreground">{group.title}</h2>
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                item.href &&
+                (pathname === item.href ||
+                  (item.href !== "/dashboard" && pathname.startsWith(item.href)));
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              onKeyDown={handleNavKeyDown}
-              data-sidebar-link="true"
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                isActive
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-              aria-current={isActive ? "page" : undefined}
-              aria-label={`رفتن به ${item.title}`}
-            >
-              <Icon className="size-5 shrink-0" />
-              <span>{item.title}</span>
-            </Link>
-          );
-        })}
+              return (
+                <Link
+                  key={`${group.title}-${item.title}`}
+                  href={item.href ?? "#"}
+                  onClick={onNavigate}
+                  onKeyDown={handleNavKeyDown}
+                  data-sidebar-link="true"
+                  className={cn(
+                    "flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                  aria-current={isActive ? "page" : undefined}
+                  aria-label={`رفتن به ${item.title}`}
+                >
+                  <span className="flex items-center gap-3 min-w-0">
+                    <Icon className="size-5 shrink-0" />
+                    <span className="truncate">{item.title}</span>
+                  </span>
+                  {item.badge ? (
+                    <span className="text-[10px] rounded-full border px-2 py-0.5">{item.badge}</span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </section>
+        ))}
       </nav>
 
       <div className="p-4 border-t">
