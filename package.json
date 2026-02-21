@@ -10,7 +10,8 @@
     "postinstall": "prisma generate",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
-    "format:check": "prettier . --check"
+    "format:check": "prettier . --check",
+    "lint:i18n": "tsx scripts/check-translations.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

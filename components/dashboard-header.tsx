@@ -38,9 +38,11 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
+import { getDictionary, type Locale } from "@/lib/i18n";
 
 interface DashboardHeaderProps {
   user: any;
+  locale: Locale;
   onOpenMobileNav?: () => void;
 }
 
@@ -56,11 +58,13 @@ const pageCtaMap = [
 
 export function DashboardHeader({
   user,
+  locale,
   onOpenMobileNav,
 }: DashboardHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [quickOpen, setQuickOpen] = useState(false);
+  const t = getDictionary(locale);
 
   const contextualActions = useMemo(() => {
     if (pathname.startsWith("/dashboard/stock-in")) {
@@ -161,7 +165,7 @@ export function DashboardHeader({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>Operational Inbox</DropdownMenuLabel>
+              <DropdownMenuLabel>{t.header.operationalInbox}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
                 <div className="flex flex-col gap-1">

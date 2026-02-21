@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { DashboardShell } from "@/components/dashboard-shell"
+import { getSessionLocale } from "@/lib/i18n"
 
 export default async function DashboardLayout({
   children,
@@ -13,8 +14,10 @@ export default async function DashboardLayout({
     redirect("/login")
   }
 
+  const locale = await getSessionLocale()
+
   return (
-    <DashboardShell user={session.user}>
+    <DashboardShell user={session.user} locale={locale}>
       {children}
     </DashboardShell>
   )
