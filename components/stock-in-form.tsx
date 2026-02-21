@@ -137,6 +137,7 @@ export function StockInForm({
   const [isPopupBlocked, setIsPopupBlocked] = useState(false);
   const [isPreparingPrint, setIsPreparingPrint] = useState(false);
   const lastUnknownScanRef = useRef<{ code: string; timestamp: number } | null>(null);
+  const lastModeRef = useRef<"scale-assisted" | "manual">("scale-assisted");
   const formRef = useRef<HTMLFormElement>(null);
 
   const {
@@ -388,6 +389,10 @@ export function StockInForm({
 
   const handleBarcodeScanned = async (barcode: string) => {
     const normalizedBarcode = barcode.trim();
+    if (!normalizedBarcode) {
+      setScannerStatus("error");
+      return;
+    }
     const now = Date.now();
     if (
       lastUnknownScanRef.current &&
@@ -422,11 +427,28 @@ export function StockInForm({
       toast.error("محصولی با این بارکد یافت نشد؛ مورد در لیست بارکدهای ناشناخته ثبت شد.", {
         action: {
           label: "open unknown barcode queue",
-          onClick: () => router.push("/dashboard/stock-in"),
+          onClick: () => router.push("/dashboard"),
         },
       });
     }
   };
+
+  useEffect(() => {
+    const nextMode = manualMode ? "manual" : "scale-assisted";
+    if (lastModeRef.current === nextMode) {
+      return;
+    }
+
+    lastModeRef.current = nextMode;
+    setCapturedAt(null);
+    setCapturedScaleWeight(null);
+    setCaptureSource(null);
+
+    if (manualMode) {
+      setIsWeightLocked(false);
+      setLockedWeight(null);
+    }
+  }, [manualMode]);
 
   const onSubmit = async (data: StockInFormData) => {
     if (manualMode && manualReason.trim().length === 0) {
@@ -1112,6 +1134,7 @@ export function StockInForm({
             <p className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
               <Clock3 className="size-3" />
               آخرین زمان پایدار: {lastStableAt ? new Date(lastStableAt).toLocaleTimeString() : "-"}
+              {!manualMode && isCapturedMeasurementStale && " · وزن کپچر شده قدیمی است"}
             </p>
             <Button
               type="submit"
