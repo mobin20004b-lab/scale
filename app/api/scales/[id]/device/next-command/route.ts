@@ -1,6 +1,9 @@
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateScaleDevice } from "@/lib/scale-device-auth";
+
+const MIN_COMMAND_POLL_INTERVAL_MS = 500;
 
 export async function GET(
   request: Request,
@@ -20,12 +23,17 @@ export async function GET(
       );
     }
 
+    const now = new Date();
+    const scale = authResult.scale;
+    if (scale.lastSeenAt && now.getTime() - scale.lastSeenAt.getTime() < MIN_COMMAND_POLL_INTERVAL_MS) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+
     await prisma.scale.update({
       where: { id },
-      data: { lastSeenAt: new Date() },
+      data: { lastSeenAt: now },
     });
 
-    const now = new Date();
     await prisma.scaleCommand.updateMany({
       where: {
         scaleId: id,
@@ -44,9 +52,15 @@ export async function GET(
       return NextResponse.json({ command: null });
     }
 
+    const ackNonce = randomUUID();
     const sent = await prisma.scaleCommand.update({
       where: { id: command.id },
-      data: { status: "SENT", sentAt: new Date() },
+      data: {
+        status: "SENT",
+        sentAt: now,
+        ackNonce,
+        ackNonceExpiresAt: new Date(now.getTime() + 5 * 60 * 1000),
+      },
     });
 
     return NextResponse.json({ command: sent });

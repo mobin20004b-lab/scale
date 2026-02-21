@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+const CONFIG_SCHEMA_VERSION = 1;
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -14,11 +16,15 @@ export async function PATCH(
 
     const { id } = await context.params;
     const body = await request.json();
+    const currentConfig = body?.config && typeof body.config === "object" ? body.config : {};
 
     const scale = await prisma.scale.update({
       where: { id },
       data: {
-        config: body?.config ?? {},
+        config: {
+          schemaVersion: CONFIG_SCHEMA_VERSION,
+          ...(currentConfig as Record<string, unknown>),
+        },
         printerType: body?.printerType ?? undefined,
         printerConnection: body?.printerConnection ?? undefined,
       },

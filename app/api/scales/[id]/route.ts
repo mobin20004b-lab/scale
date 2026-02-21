@@ -66,6 +66,8 @@ export async function PUT(
       printerConnection,
       config,
       lastSeenAt,
+      minFirmwareVersion,
+      retiredAt,
     } = body;
 
     const parsedPrecision = Number.isFinite(precision)
@@ -105,6 +107,14 @@ export async function PUT(
             ? undefined
             : lastSeenAt
               ? new Date(lastSeenAt)
+              : null,
+        minFirmwareVersion:
+          minFirmwareVersion === undefined ? undefined : minFirmwareVersion || null,
+        retiredAt:
+          retiredAt === undefined
+            ? undefined
+            : retiredAt
+              ? new Date(retiredAt)
               : null,
       },
       include: {
@@ -147,7 +157,14 @@ export async function DELETE(
     if ((scale._count.stockIns ?? 0) > 0) {
       await prisma.scale.update({
         where: { id },
-        data: { isActive: false, archivedAt: new Date() },
+        data: {
+          isActive: false,
+          archivedAt: new Date(),
+          retiredAt: new Date(),
+          bootstrapToken: null,
+          bootstrapTokenExpiresAt: null,
+          config: null,
+        },
       });
 
       return NextResponse.json({
@@ -158,9 +175,19 @@ export async function DELETE(
       });
     }
 
-    await prisma.scale.delete({ where: { id } });
+    await prisma.scale.update({
+      where: { id },
+      data: {
+        isActive: false,
+        archivedAt: new Date(),
+        retiredAt: new Date(),
+        bootstrapToken: null,
+        bootstrapTokenExpiresAt: null,
+        config: null,
+      },
+    });
 
-    return NextResponse.json({ success: true, archived: false });
+    return NextResponse.json({ success: true, archived: true, retired: true });
   } catch (error) {
     console.error("[v0] Error deleting scale:", error);
     return NextResponse.json(

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateScaleDevice } from "@/lib/scale-device-auth";
 
+const MAX_DEVICE_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -21,6 +23,16 @@ export async function POST(
     }
 
     const body = await request.json();
+    const reportedAtRaw = typeof body?.reportedAt === "string" ? Date.parse(body.reportedAt) : NaN;
+    if (Number.isFinite(reportedAtRaw)) {
+      const skew = Math.abs(Date.now() - reportedAtRaw);
+      if (skew > MAX_DEVICE_CLOCK_SKEW_MS) {
+        return NextResponse.json(
+          { error: "Device clock skew too large; verify NTP sync" },
+          { status: 400 }
+        );
+      }
+    }
 
     const telemetry = await prisma.scaleTelemetry.create({
       data: {
@@ -32,6 +44,10 @@ export async function POST(
           ? Number(body.temperature)
           : null,
         battery: Number.isFinite(body?.battery) ? Number(body.battery) : null,
+        rebootReason:
+          typeof body?.rebootReason === "string" ? body.rebootReason.slice(0, 128) : null,
+        diagnostics:
+          body?.diagnostics && typeof body.diagnostics === "object" ? body.diagnostics : null,
         payload: body?.payload ?? null,
       },
     });

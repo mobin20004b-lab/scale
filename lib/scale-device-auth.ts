@@ -1,4 +1,12 @@
+import { timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
+
+function safeTokenEqual(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+}
 
 export async function authenticateScaleDevice(scaleId: string, authorization: string) {
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
@@ -11,7 +19,11 @@ export async function authenticateScaleDevice(scaleId: string, authorization: st
     return { error: "Scale not found", status: 404 as const };
   }
 
-  if (scale.apiKey !== token) {
+  if (scale.retiredAt) {
+    return { error: "Scale retired", status: 403 as const };
+  }
+
+  if (!safeTokenEqual(scale.apiKey, token)) {
     return { error: "Invalid token", status: 401 as const };
   }
 

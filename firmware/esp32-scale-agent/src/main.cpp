@@ -256,6 +256,11 @@ void sendTelemetryIfNeeded() {
   req["freeHeap"] = ESP.getFreeHeap();
   req["uptimeSec"] = now / 1000;
   req["firmwareVersion"] = firmwareVersion;
+  req["rebootReason"] = String((int)esp_reset_reason());
+  JsonObject diagnostics = req["diagnostics"].to<JsonObject>();
+  diagnostics["rssi"] = WiFi.RSSI();
+  diagnostics["heap"] = ESP.getFreeHeap();
+  diagnostics["uptimeSec"] = now / 1000;
 
   if (sendJson("POST", endpoint("/api/scales/" + cfg.scaleId + "/device/telemetry"), req)) {
     runtime.lastTelemetryAt = now;
@@ -284,10 +289,11 @@ bool executePrint(const String& text) {
   return true;
 }
 
-void ackCommand(const String& commandId, const String& status, const String& err = "") {
+void ackCommand(const String& commandId, const String& status, const String& ackNonce = "", const String& err = "") {
   JsonDocument req;
   req["commandId"] = commandId;
   req["status"] = status;
+  if (!ackNonce.isEmpty()) req["ackNonce"] = ackNonce;
   if (!err.isEmpty()) req["error"] = err;
   sendJson("POST", endpoint("/api/scales/" + cfg.scaleId + "/device/command-ack"), req);
 }
@@ -325,8 +331,10 @@ void handleCommand(JsonVariantConst command) {
   const String type = String(command["type"] | "");
   if (id.isEmpty() || type.isEmpty()) return;
 
+  const String ackNonce = String(command["ackNonce"] | "");
+
   if (type == "PRINT_TEST") {
-    ackCommand(id, executePrint("TEST " + String(millis())) ? "ACKED" : "FAILED", "");
+    ackCommand(id, executePrint("TEST " + String(millis())) ? "ACKED" : "FAILED", ackNonce);
     return;
   }
 
@@ -337,28 +345,38 @@ void handleCommand(JsonVariantConst command) {
       if (p["text"].is<const char*>()) text = String(p["text"].as<const char*>());
       else if (p["source"].is<const char*>()) text = String(p["source"].as<const char*>());
     }
-    ackCommand(id, executePrint(text) ? "ACKED" : "FAILED", "");
+    ackCommand(id, executePrint(text) ? "ACKED" : "FAILED", ackNonce);
     return;
   }
 
   if (type == "SET_CONFIG") {
     if (command["payload"].is<JsonObjectConst>()) {
       applyConfigFromServer(command["payload"], runtime.configVersion);
-      ackCommand(id, "ACKED");
+      ackCommand(id, "ACKED", ackNonce);
     } else {
-      ackCommand(id, "FAILED", "Invalid config payload");
+      ackCommand(id, "FAILED", ackNonce, "Invalid config payload");
     }
     return;
   }
 
-  if (type == "RESTART") {
-    ackCommand(id, "ACKED");
+  if (type == "RETIRE") {
+    prefs.begin("scale-agent", false);
+    prefs.clear();
+    prefs.end();
+    ackCommand(id, "ACKED", ackNonce);
     delay(150);
     ESP.restart();
     return;
   }
 
-  ackCommand(id, "FAILED", "Unsupported command");
+  if (type == "RESTART") {
+    ackCommand(id, "ACKED", ackNonce);
+    delay(150);
+    ESP.restart();
+    return;
+  }
+
+  ackCommand(id, "FAILED", ackNonce, "Unsupported command");
 }
 
 void pollCommandsIfNeeded() {
