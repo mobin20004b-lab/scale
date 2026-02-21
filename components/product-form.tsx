@@ -31,6 +31,11 @@ export function ProductForm({ product }: ProductFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [lastSavedLabelData, setLastSavedLabelData] = useState<{
+    name: string;
+    sku: string;
+    barcode?: string | null;
+  } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const {
@@ -81,6 +86,36 @@ export function ProductForm({ product }: ProductFormProps) {
     "مثال: 250 (گرم برای هر واحد)"
   );
 
+  const handlePrintLabel = () => {
+    if (!lastSavedLabelData) return;
+
+    const labelWindow = window.open("", "_blank", "width=480,height=320");
+    if (!labelWindow) return;
+
+    labelWindow.document.write(`
+      <html lang="fa">
+        <head>
+          <title>Product Label</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; direction: rtl; }
+            .label { border: 1px solid #000; border-radius: 8px; padding: 16px; }
+            h2 { margin: 0 0 12px; font-size: 18px; }
+            p { margin: 6px 0; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="label">
+            <h2>${lastSavedLabelData.name}</h2>
+            <p>SKU: ${lastSavedLabelData.sku}</p>
+            <p>Barcode: ${lastSavedLabelData.barcode || "-"}</p>
+          </div>
+          <script>window.onload = () => { window.print(); window.close(); };</script>
+        </body>
+      </html>
+    `);
+    labelWindow.document.close();
+  };
+
   const onSubmit = async (data: ProductFormData) => {
     setIsLoading(true);
     setSaveState("saving");
@@ -101,9 +136,14 @@ export function ProductForm({ product }: ProductFormProps) {
       });
 
       if (response.ok) {
+        const savedProduct = await response.json();
+        setLastSavedLabelData({
+          name: savedProduct.name ?? data.name,
+          sku: savedProduct.sku ?? data.sku ?? "-",
+          barcode: savedProduct.barcode ?? data.barcode ?? null,
+        });
         setSaveState("saved");
         toast.success("Saved", { id: toastId, duration: 5000 });
-        router.push("/dashboard/products");
         router.refresh();
       } else {
         const error = await response.json();
@@ -134,7 +174,21 @@ export function ProductForm({ product }: ProductFormProps) {
           aria-busy={isLoading}
         >
           <FormErrorSummary errors={errorList} />
-          <SaveStatusInline state={saveState} />
+          <SaveStatusInline
+            state={saveState}
+            action={
+              saveState === "saved" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrintLabel}
+                >
+                  چاپ لیبل
+                </Button>
+              ) : null
+            }
+          />
 
           <div className="grid gap-4 md:grid-cols-2">
             <FormField

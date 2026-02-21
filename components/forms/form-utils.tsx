@@ -10,9 +10,11 @@ export type SaveState = "idle" | "saving" | "saved" | "failed";
 export function SaveStatusInline({
   state,
   className,
+  action,
 }: {
   state: SaveState;
   className?: string;
+  action?: React.ReactNode;
 }) {
   const config = {
     idle: { label: "Idle", icon: Circle },
@@ -24,17 +26,19 @@ export function SaveStatusInline({
   const Icon = config.icon;
 
   return (
-    <p
-      className={cn(
-        "flex items-center gap-1.5 text-xs text-muted-foreground",
-        className
-      )}
+    <div
+      className={cn("flex items-center justify-between gap-2", className)}
       role="status"
       aria-live="polite"
     >
-      <Icon className={cn("size-3.5", state === "saving" && "animate-spin")} />
-      <span>{config.label}</span>
-    </p>
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Icon
+          className={cn("size-3.5", state === "saving" && "animate-spin")}
+        />
+        <span>{config.label}</span>
+      </p>
+      {action}
+    </div>
   );
 }
 

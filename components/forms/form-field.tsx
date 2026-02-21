@@ -47,7 +47,6 @@ export function FormField({
       ) : null}
       {!error && success ? (
         <p className={cn("flex items-center gap-1 text-xs text-emerald-600")}>
-          {" "}
           <CheckCircle2 className="size-3.5" />
           معتبر است
         </p>
