@@ -9,7 +9,7 @@ export default async function StockOutPage({
 }) {
   const params = await searchParams;
 
-  const [products, recentStockOuts] = await Promise.all([
+  const [products, recentStockOuts, warehouses] = await Promise.all([
     prisma.product.findMany({
       where: {
         currentStock: {
@@ -30,6 +30,10 @@ export default async function StockOutPage({
         },
       },
     }),
+    prisma.warehouse.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   return (
@@ -40,7 +44,7 @@ export default async function StockOutPage({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <StockOutForm products={products} />
+        <StockOutForm products={products} warehouses={warehouses} />
         <StockOutList
           stockOuts={recentStockOuts}
           highlightId={params.highlight}

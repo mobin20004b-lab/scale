@@ -57,6 +57,12 @@ model StockIn {
   scaleWeight   Float?
   supplier      String?
   invoiceNumber String?
+  sourceDocumentType String?
+  sourceDocumentNumber String?
+  lotBatch      String?
+  expiryDate    String?
+  supplierLot   String?
+  qualityResult String?
   notes         String?
   date          DateTime   @default(now())
   createdAt     DateTime   @default(now())
@@ -82,6 +88,7 @@ model Warehouse {
   updatedAt   DateTime  @updatedAt
   scales      Scale[]
   stockIns    StockIn[]
+  stockOuts   StockOut[]
 
   @@map("warehouses")
 }
@@ -113,6 +120,7 @@ model StockOut {
   id            String   @id @default(cuid())
   productId     String
   userId        String
+  warehouseId   String?
   quantity      Float
   weight        Float
   customer      String?
@@ -122,9 +130,11 @@ model StockOut {
   createdAt     DateTime @default(now())
   product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   user          User     @relation(fields: [userId], references: [id])
+  warehouse     Warehouse? @relation(fields: [warehouseId], references: [id])
 
   @@index([productId])
   @@index([userId])
+  @@index([warehouseId])
   @@index([date])
   @@map("stock_outs")
 }
