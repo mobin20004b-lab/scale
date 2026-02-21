@@ -14,6 +14,16 @@ export async function POST(request: Request) {
 
     const parsed = stockOutPayloadSchema.parse(await request.json());
 
+    if (parsed.warehouseId) {
+      const warehouse = await prisma.warehouse.findUnique({
+        where: { id: parsed.warehouseId },
+      });
+
+      if (!warehouse) {
+        return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
+      }
+    }
+
     const product = await prisma.product.findUnique({
       where: { id: parsed.productId },
     });
@@ -36,6 +46,7 @@ export async function POST(request: Request) {
           customer: parsed.customer,
           invoiceNumber: parsed.invoiceNumber,
           notes: parsed.notes,
+          warehouseId: parsed.warehouseId || null,
         },
       });
 

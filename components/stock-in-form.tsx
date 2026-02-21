@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, RefreshCcw, Scan, Plus, TriangleAlert } from "lucide-react";
+import { Loader2, RefreshCcw, Scan, Plus, TriangleAlert, Info } from "lucide-react";
 import { useScaleLive } from "@/hooks/use-scale-live";
 import { BarcodeScanner } from "./barcode-scanner";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,7 @@ interface Product {
   name: string;
   barcode: string | null;
   unit: string;
+  currentStock: number;
 }
 
 interface Warehouse {
@@ -105,11 +106,19 @@ export function StockInForm({
       quantity: "",
       supplier: "",
       invoiceNumber: "",
+      sourceDocumentType: "",
+      sourceDocumentNumber: "",
+      lotBatch: "",
+      expiryDate: "",
+      supplierLot: "",
+      qualityResult: "",
       notes: "",
     },
   });
 
   const productId = watch("productId");
+  const quantity = watch("quantity");
+  const sourceDocumentType = watch("sourceDocumentType");
   const guard = useUnsavedChangesGuard(isDirty && !isLoading);
   const errorList = useMemo(
     () =>
@@ -128,6 +137,22 @@ export function StockInForm({
     () => scales.find((scale) => scale.id === selectedScaleId) ?? null,
     [scales, selectedScaleId]
   );
+
+  const stockPreview = useMemo(() => {
+    if (!selectedProduct) return null;
+
+    const parsedQuantity = Number(quantity);
+    const current = Number(selectedProduct.currentStock);
+
+    if (Number.isNaN(parsedQuantity) || parsedQuantity <= 0) {
+      return { current, after: current };
+    }
+
+    return { current, after: current + parsedQuantity };
+  }, [quantity, selectedProduct]);
+
+  const isSubmitDisabled =
+    isLoading || !isValid || !productId || !selectedWarehouseId || !selectedScaleId;
 
   useEffect(() => {
     const presetProductId = searchParams.get("productId");
@@ -284,6 +309,11 @@ export function StockInForm({
                 ))}
               </SelectContent>
             </Select>
+            {!selectedWarehouseId && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                برای جلوگیری از ثبت اشتباه، ابتدا انبار را انتخاب کنید.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -304,6 +334,11 @@ export function StockInForm({
                 ))}
               </SelectContent>
             </Select>
+            {!selectedScaleId && selectedWarehouseId && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                انتخاب ترازو برای ثبت ورود الزامی است.
+              </p>
+            )}
           </div>
 
           {selectedWarehouseId && filteredScales.length === 0 && (
@@ -542,6 +577,82 @@ export function StockInForm({
           </div>
 
           <div className="space-y-2">
+            <Label>نوع سند مبدا</Label>
+            <Select
+              value={sourceDocumentType || "none"}
+              onValueChange={(value) => {
+                setValue("sourceDocumentType", value === "none" ? "" : value, {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                  shouldValidate: true,
+                });
+              }}
+            >
+              <SelectTrigger aria-label="انتخاب نوع سند مبدا">
+                <SelectValue placeholder="انتخاب نوع سند" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">بدون سند</SelectItem>
+                <SelectItem value="invoice">فاکتور</SelectItem>
+                <SelectItem value="purchase-order">سفارش خرید</SelectItem>
+                <SelectItem value="transfer-note">حواله انتقال</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="sourceDocumentNumber">شماره سند مبدا</Label>
+            <Input
+              id="sourceDocumentNumber"
+              {...register("sourceDocumentNumber")}
+              disabled={isLoading}
+              dir="ltr"
+              placeholder="مثال: PO-1403-0082"
+            />
+          </div>
+
+          <div className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Info className="size-4" />
+              فیلدهای اختیاری دریافت
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="lotBatch">لات / بچ</Label>
+                <Input id="lotBatch" {...register("lotBatch")} placeholder="Lot-A12" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="expiryDate">تاریخ انقضا</Label>
+                <Input id="expiryDate" type="date" {...register("expiryDate")} dir="ltr" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="supplierLot">لات تامین‌کننده</Label>
+                <Input id="supplierLot" {...register("supplierLot")} placeholder="SUP-LOT-44" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="qualityResult">نتیجه کنترل کیفیت</Label>
+                <Input
+                  id="qualityResult"
+                  {...register("qualityResult")}
+                  placeholder="قبول / مشروط / رد"
+                />
+              </div>
+            </div>
+          </div>
+
+          {stockPreview && (
+            <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-1">
+              <p>پیش‌نمایش موجودی</p>
+              <p>
+                موجودی فعلی: {stockPreview.current.toFixed(2)} {selectedProduct?.unit}
+              </p>
+              <p>
+                پس از ورود: {stockPreview.after.toFixed(2)} {selectedProduct?.unit}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
             <Label htmlFor="notes">یادداشت</Label>
             <textarea
               id="notes"
@@ -556,7 +667,7 @@ export function StockInForm({
           <div className="hidden md:block">
             <Button
               type="submit"
-              disabled={isLoading || !isValid || !productId}
+              disabled={isSubmitDisabled}
               className="w-full"
               aria-busy={isLoading}
             >
@@ -579,7 +690,7 @@ export function StockInForm({
           <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden">
             <Button
               type="submit"
-              disabled={isLoading || !isValid || !productId}
+              disabled={isSubmitDisabled}
               className="w-full"
               aria-busy={isLoading}
             >

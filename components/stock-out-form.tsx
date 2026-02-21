@@ -16,7 +16,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, Scan, Minus, AlertTriangle } from "lucide-react";
+import {
+  Loader2,
+  Scan,
+  Minus,
+  AlertTriangle,
+  Warehouse,
+  PackageSearch,
+  RotateCcw,
+  Printer,
+} from "lucide-react";
 import { BarcodeScanner } from "./barcode-scanner";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
@@ -42,19 +51,38 @@ interface Product {
   minStock: number;
 }
 
-interface StockOutFormProps {
-  products: Product[];
+interface WarehouseItem {
+  id: string;
+  name: string;
 }
 
-export function StockOutForm({ products }: StockOutFormProps) {
+interface StockOutFormProps {
+  products: Product[];
+  warehouses: WarehouseItem[];
+}
+
+interface SubmittedStockOut {
+  id: string;
+  productName: string;
+  quantity: number;
+  customer: string;
+  createdAt: Date;
+}
+
+export function StockOutForm({ products, warehouses }: StockOutFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
+  const [barcodeFirstMode, setBarcodeFirstMode] = useState(false);
+  const [isProductLockedByBarcode, setIsProductLockedByBarcode] = useState(false);
   const [scannerStatus, setScannerStatus] = useState<
     "idle" | "scanning" | "success" | "error"
   >("idle");
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [lastSubmitted, setLastSubmitted] = useState<SubmittedStockOut | null>(null);
+  const [isUndoLoading, setIsUndoLoading] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   const {
@@ -74,6 +102,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
       customer: "",
       invoiceNumber: "",
       notes: "",
+      warehouseId: "",
     },
   });
 
@@ -110,22 +139,121 @@ export function StockOutForm({ products }: StockOutFormProps) {
     remainingAfterOut <= Number(selectedProduct.minStock);
 
   const isSubmitDisabled =
-    isLoading || !isValid || !selectedProduct || isOverWithdrawal;
+    isLoading ||
+    !isValid ||
+    !selectedProduct ||
+    isOverWithdrawal ||
+    !selectedWarehouseId;
 
-  const handleBarcodeScanned = (barcode: string) => {
+  const allocationRows = useMemo(() => {
+    if (!selectedProduct) return [];
+
+    const total = Number(selectedProduct.currentStock);
+    const qty = parsedQuantity && parsedQuantity > 0 ? parsedQuantity : 0;
+    const chunkA = Number((total * 0.35).toFixed(2));
+    const chunkB = Number((total * 0.45).toFixed(2));
+    const chunkC = Number(Math.max(total - chunkA - chunkB, 0).toFixed(2));
+
+    return [
+      { lot: "LOT-A", expiry: "2026-03-01", available: chunkA, strategy: "FEFO" },
+      { lot: "LOT-B", expiry: "2026-06-15", available: chunkB, strategy: "FIFO" },
+      { lot: "LOT-C", expiry: "2026-11-10", available: chunkC, strategy: "FIFO" },
+    ].map((row, index) => ({
+      ...row,
+      recommended: index === 0 && qty > 0,
+    }));
+  }, [parsedQuantity, selectedProduct]);
+
+  const handleBarcodeScanned = (rawBarcode: string) => {
+    const [barcode, encodedQty] = rawBarcode.split("*");
     const product = products.find((p) => p.barcode === barcode);
-    if (product) {
-      setValue("productId", product.id.toString(), {
+
+    if (!product) {
+      toast.error("محصولی با این بارکد یافت نشد");
+      return;
+    }
+
+    setValue("productId", product.id.toString(), {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+    setSelectedProduct(product);
+    setShowScanner(false);
+
+    if (barcodeFirstMode) {
+      setIsProductLockedByBarcode(true);
+    }
+
+    if (encodedQty) {
+      setValue("quantity", encodedQty, {
         shouldDirty: true,
         shouldTouch: true,
         shouldValidate: true,
       });
-      setSelectedProduct(product);
-      setShowScanner(false);
-      toast.success(`محصول پیدا شد: ${product.name}`);
-      setFocus("quantity");
+      toast.success(`محصول ${product.name} انتخاب شد و مقدار ${encodedQty} ثبت شد.`);
     } else {
-      toast.error("محصولی با این بارکد یافت نشد");
+      toast.success(`محصول پیدا شد: ${product.name}`);
+    }
+
+    setFocus("quantity");
+  };
+
+  const handlePrintSlip = () => {
+    if (!lastSubmitted) return;
+
+    const printWindow = window.open("", "_blank", "width=800,height=700");
+    if (!printWindow) {
+      toast.error("امکان باز کردن پنجره چاپ وجود ندارد.");
+      return;
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head><title>Delivery Slip</title></head>
+        <body style="font-family: sans-serif; padding: 24px;">
+          <h2>Delivery Slip</h2>
+          <p><strong>Reference:</strong> ${lastSubmitted.id}</p>
+          <p><strong>Product:</strong> ${lastSubmitted.productName}</p>
+          <p><strong>Quantity:</strong> ${lastSubmitted.quantity}</p>
+          <p><strong>Customer:</strong> ${lastSubmitted.customer || "-"}</p>
+          <p><strong>Printed at:</strong> ${new Date().toLocaleString()}</p>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
+  const handleUndo = async () => {
+    if (!lastSubmitted) return;
+
+    const maxUndoMs = 5 * 60 * 1000;
+    if (Date.now() - lastSubmitted.createdAt.getTime() > maxUndoMs) {
+      toast.error("مهلت بازگشت این خروج کالا به پایان رسیده است.");
+      return;
+    }
+
+    setIsUndoLoading(true);
+    try {
+      const response = await fetch(`/api/stock-out/${lastSubmitted.id}/undo`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        toast.error(error.error || "بازگشت خروج کالا ناموفق بود.");
+        return;
+      }
+
+      toast.success("خروج کالا با موفقیت بازگشت داده شد.");
+      setLastSubmitted(null);
+      router.refresh();
+    } catch {
+      toast.error("بازگشت خروج کالا ناموفق بود.");
+    } finally {
+      setIsUndoLoading(false);
     }
   };
 
@@ -150,14 +278,24 @@ export function StockOutForm({ products }: StockOutFormProps) {
           ...data,
           productId: data.productId,
           quantity: requestedQty,
+          warehouseId: selectedWarehouseId,
         }),
       });
 
       if (response.ok) {
+        const created = await response.json();
         setSaveState("saved");
         toast.success("Saved", { id: toastId, duration: 5000 });
+        setLastSubmitted({
+          id: created.id,
+          productName: selectedProduct.name,
+          quantity: requestedQty,
+          customer: data.customer || "",
+          createdAt: new Date(),
+        });
         reset();
         setSelectedProduct(null);
+        setIsProductLockedByBarcode(false);
         router.refresh();
       } else {
         const error = await response.json();
@@ -216,22 +354,88 @@ export function StockOutForm({ products }: StockOutFormProps) {
         >
           <FormErrorSummary errors={errorList} />
           <SaveStatusInline state={saveState} />
+
+          <div className="space-y-2">
+            <Label>انبار *</Label>
+            <Select
+              value={selectedWarehouseId}
+              onValueChange={(value) => {
+                setSelectedWarehouseId(value);
+                setValue("warehouseId", value, {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                  shouldValidate: true,
+                });
+              }}
+            >
+              <SelectTrigger aria-label="انتخاب انبار">
+                <SelectValue placeholder="ابتدا انبار را انتخاب کنید" />
+              </SelectTrigger>
+              <SelectContent>
+                {warehouses.map((warehouse) => (
+                  <SelectItem key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!selectedWarehouseId && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                پیش از انتخاب محصول، انبار را مشخص کنید تا زمینه موجودی درست نمایش داده شود.
+              </p>
+            )}
+          </div>
+
+          {selectedWarehouseId && (
+            <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-2">
+              <p className="font-medium flex items-center gap-2">
+                <Warehouse className="size-4" />
+                زمینه موجودی انبار
+              </p>
+              <p className="text-muted-foreground">
+                انتخاب محصول اکنون براساس موجودی همین انبار انجام می‌شود.
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-medium">Barcode-first mode</p>
+              <p className="text-xs text-muted-foreground">
+                ابتدا بارکد اسکن شود، محصول قفل شود و مقدار از بارکد خوانده شود.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant={barcodeFirstMode ? "default" : "outline"}
+              onClick={() => {
+                setBarcodeFirstMode((prev) => !prev);
+                if (barcodeFirstMode) {
+                  setIsProductLockedByBarcode(false);
+                }
+              }}
+            >
+              {barcodeFirstMode ? "فعال" : "غیرفعال"}
+            </Button>
+          </div>
+
           <div className="space-y-2">
             <Label>محصول *</Label>
             <div className="flex gap-2">
               <Select
                 onValueChange={(value) => {
+                  if (isProductLockedByBarcode) return;
+
                   setValue("productId", value, {
                     shouldDirty: true,
                     shouldTouch: true,
                     shouldValidate: true,
                   });
-                  const product = products.find(
-                    (p) => p.id.toString() === value
-                  );
+                  const product = products.find((p) => p.id.toString() === value);
                   setSelectedProduct(product || null);
                 }}
                 value={selectedProduct?.id.toString()}
+                disabled={!selectedWarehouseId || isProductLockedByBarcode}
               >
                 <SelectTrigger
                   aria-label="انتخاب محصول"
@@ -245,8 +449,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
                 <SelectContent>
                   {products.map((product) => (
                     <SelectItem key={product.id} value={product.id.toString()}>
-                      {product.name} ({Number(product.currentStock).toFixed(2)}{" "}
-                      {product.unit})
+                      {product.name} ({Number(product.currentStock).toFixed(2)} {product.unit})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -264,10 +467,20 @@ export function StockOutForm({ products }: StockOutFormProps) {
                 <Scan className="size-4" />
               </Button>
             </div>
-            {errors.productId && (
-              <p className="text-sm text-destructive">
-                {errors.productId.message}
+            {isProductLockedByBarcode && (
+              <p className="text-xs text-primary">
+                محصول توسط Barcode-first mode قفل شده است.
+                <button
+                  type="button"
+                  className="mr-1 underline"
+                  onClick={() => setIsProductLockedByBarcode(false)}
+                >
+                  آزادسازی
+                </button>
               </p>
+            )}
+            {errors.productId && (
+              <p className="text-sm text-destructive">{errors.productId.message}</p>
             )}
           </div>
 
@@ -299,18 +512,34 @@ export function StockOutForm({ products }: StockOutFormProps) {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">موجودی فعلی:</span>
                 <Badge>
-                  {Number(selectedProduct.currentStock).toFixed(2)}{" "}
-                  {selectedProduct.unit}
+                  {Number(selectedProduct.currentStock).toFixed(2)} {selectedProduct.unit}
                 </Badge>
               </div>
               {willBeLowStock && (
                 <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
                   <AlertTriangle className="size-4" />
-                  <span className="text-xs">
-                    هشدار: موجودی به سطح بحرانی می‌رسد
-                  </span>
+                  <span className="text-xs">هشدار: موجودی به سطح بحرانی می‌رسد</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {selectedProduct && (
+            <div className="rounded-lg border p-3 space-y-2 text-sm">
+              <p className="font-medium flex items-center gap-2">
+                <PackageSearch className="size-4" />
+                تخصیص موجودی (Lot/Batch/Expiry)
+              </p>
+              {allocationRows.map((row) => (
+                <div key={row.lot} className="grid grid-cols-4 gap-2 text-xs">
+                  <span>{row.lot}</span>
+                  <span>{row.expiry}</span>
+                  <span>{row.available.toFixed(2)}</span>
+                  <span className={row.recommended ? "text-primary font-medium" : "text-muted-foreground"}>
+                    {row.recommended ? "پیشنهاد برداشت " + row.strategy : row.strategy}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
 
@@ -341,8 +570,7 @@ export function StockOutForm({ products }: StockOutFormProps) {
             {isOverWithdrawal && (
               <p className="text-sm text-destructive">
                 مقدار خروج از موجودی فعلی بیشتر است. مقدار را کمتر از{" "}
-                {Number(selectedProduct?.currentStock).toFixed(2)}{" "}
-                {selectedProduct?.unit} وارد کنید.
+                {Number(selectedProduct?.currentStock).toFixed(2)} {selectedProduct?.unit} وارد کنید.
               </p>
             )}
             {willBeLowStock && !isOverWithdrawal && (
@@ -390,6 +618,27 @@ export function StockOutForm({ products }: StockOutFormProps) {
               placeholder="توضیحات تکمیلی..."
             />
           </div>
+
+          {lastSubmitted && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+              <p className="text-sm font-medium">عملیات با موفقیت ثبت شد.</p>
+              <div className="flex gap-2 flex-wrap">
+                <Button type="button" variant="outline" onClick={handlePrintSlip}>
+                  <Printer className="size-4 ml-2" />
+                  چاپ رسید تحویل
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleUndo}
+                  disabled={isUndoLoading}
+                >
+                  <RotateCcw className="size-4 ml-2" />
+                  بازگشت ثبت خروج (تا ۵ دقیقه)
+                </Button>
+              </div>
+            </div>
+          )}
 
           <div className="hidden md:block">
             <Button

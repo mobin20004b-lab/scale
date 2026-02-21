@@ -61,6 +61,12 @@ const stockMovementBase = {
 export const stockInFormSchema = z.object({
   ...stockMovementBase,
   supplier: z.string().optional(),
+  sourceDocumentType: z.string().optional(),
+  sourceDocumentNumber: z.string().optional(),
+  lotBatch: z.string().optional(),
+  expiryDate: z.string().optional(),
+  supplierLot: z.string().optional(),
+  qualityResult: z.string().optional(),
 });
 
 export const stockOutFormSchema = z.object({
@@ -77,6 +83,12 @@ export const stockInPayloadSchema = z.object({
   warehouseId: z.string().trim().optional().nullable(),
   scaleId: z.string().trim().optional().nullable(),
   scaleWeight: z.coerce.number().optional().nullable(),
+  sourceDocumentType: optionalNullableText,
+  sourceDocumentNumber: optionalNullableText,
+  lotBatch: optionalNullableText,
+  expiryDate: optionalNullableText,
+  supplierLot: optionalNullableText,
+  qualityResult: optionalNullableText,
 });
 
 export const stockOutPayloadSchema = z.object({
@@ -85,6 +97,7 @@ export const stockOutPayloadSchema = z.object({
   customer: optionalNullableText,
   invoiceNumber: optionalNullableText,
   notes: optionalNullableText,
+  warehouseId: z.string().trim().optional().nullable(),
 });
 
 export const externalStockInPayloadSchema = stockInPayloadSchema.pick({
