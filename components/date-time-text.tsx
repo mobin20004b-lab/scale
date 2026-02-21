@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import {
   DateInput,
   formatPersianDateTime,
@@ -18,8 +21,18 @@ export function DateTimeText({
   showTimeZone = false,
   className,
 }: DateTimeTextProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const label = mode === "relative" ? formatPersianRelativeTime(value) : formatPersianDateTime(value)
   const timeZoneLabel = showTimeZone ? getLocalTimeZoneLabel(value) : null
+
+  if (!mounted) {
+    return <span className={className}>{mode === "relative" ? "..." : "---/--/--"}</span>;
+  }
 
   return (
     <span className={className} title={timeZoneLabel ?? undefined}>
