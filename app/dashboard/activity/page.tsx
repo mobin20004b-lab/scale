@@ -1,46 +1,61 @@
-import Link from "next/link";
-import { prisma } from "@/lib/prisma";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { History } from "lucide-react";
-import { DateTimeText } from "@/components/date-time-text";
-import { EmptyStatePanel } from "@/components/ui/async-state";
+import Link from "next/link"
+import { prisma } from "@/lib/prisma"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { History } from "lucide-react"
+import { DateTimeText } from "@/components/date-time-text"
+import { EmptyStatePanel } from "@/components/ui/async-state"
+import {
+  activityQuerySchema,
+  getTimeZoneLabel,
+  resolveBusinessTimeZone,
+  toBusinessDayEnd,
+  toBusinessDayStart,
+} from "@/lib/business-timezone"
+import { readSystemSettings } from "@/lib/system-settings"
 
 const getActionColor = (action: string) => {
-  if (action.includes("ورود") || action.includes("ایجاد")) return "default";
-  if (action.includes("خروج")) return "secondary";
-  if (action.includes("حذف")) return "destructive";
-  return "outline";
-};
+  if (action.includes("ورود") || action.includes("ایجاد")) return "default"
+  if (action.includes("خروج")) return "secondary"
+  if (action.includes("حذف")) return "destructive"
+  return "outline"
+}
 
 const getEntityLink = (entity: string, entityId: string) => {
-  if (entity === "Product") return `/dashboard/products/${entityId}/edit`;
-  if (entity === "StockIn") return `/dashboard/stock-in?highlight=${entityId}`;
-  if (entity === "StockOut")
-    return `/dashboard/stock-out?highlight=${entityId}`;
-  return "/dashboard/activity";
-};
+  if (entity === "Product") return `/dashboard/products/${entityId}/edit`
+  if (entity === "StockIn") return `/dashboard/stock-in?highlight=${entityId}`
+  if (entity === "StockOut") return `/dashboard/stock-out?highlight=${entityId}`
+  return "/dashboard/activity"
+}
 
 export default async function ActivityPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    entity?: string;
-    user?: string;
-    from?: string;
-    to?: string;
-  }>;
+    entity?: string
+    user?: string
+    from?: string
+    to?: string
+  }>
 }) {
-  const params = await searchParams;
+  const [params, settings] = await Promise.all([searchParams, readSystemSettings()])
+  const businessTimeZone = resolveBusinessTimeZone(settings.general.timezone)
 
-  const where: any = {};
-  if (params.entity && params.entity !== "all") where.entity = params.entity;
-  if (params.user && params.user !== "all") where.userId = params.user;
-  if (params.from || params.to) {
+  const parsed = activityQuerySchema.safeParse(params)
+  const validParams = parsed.success ? parsed.data : {}
+
+  const where: any = {}
+  if (validParams.entity && validParams.entity !== "all") where.entity = validParams.entity
+  if (validParams.user && validParams.user !== "all") where.userId = validParams.user
+  if (validParams.from || validParams.to) {
     where.createdAt = {
-      ...(params.from ? { gte: new Date(`${params.from}T00:00:00`) } : {}),
-      ...(params.to ? { lte: new Date(`${params.to}T23:59:59`) } : {}),
-    };
+      ...(validParams.from
+        ? { gte: toBusinessDayStart(validParams.from, businessTimeZone) }
+        : {}),
+      ...(validParams.to
+        ? { lte: toBusinessDayEnd(validParams.to, businessTimeZone) }
+        : {}),
+    }
   }
 
   const [activities, users] = await Promise.all([
@@ -54,10 +69,10 @@ export default async function ActivityPage({
       select: { id: true, full_name: true },
       orderBy: { full_name: "asc" },
     }),
-  ]);
+  ])
 
-  const entityValue = params.entity ?? "all";
-  const userValue = params.user ?? "all";
+  const entityValue = validParams.entity ?? "all"
+  const userValue = validParams.user ?? "all"
 
   return (
     <div className="space-y-6">
@@ -74,6 +89,9 @@ export default async function ActivityPage({
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="mb-3 text-xs text-muted-foreground">
+            بازه‌های تاریخ بر اساس منطقه زمانی فعال: {getTimeZoneLabel(businessTimeZone)}
+          </div>
           <form className="grid gap-3 md:grid-cols-4">
             <select
               name="entity"
@@ -100,16 +118,16 @@ export default async function ActivityPage({
             <input
               type="date"
               name="from"
-              defaultValue={params.from ?? ""}
+              defaultValue={validParams.from ?? ""}
               className="h-10 rounded-md border bg-background px-3 text-sm"
             />
             <input
               type="date"
               name="to"
-              defaultValue={params.to ?? ""}
+              defaultValue={validParams.to ?? ""}
               className="h-10 rounded-md border bg-background px-3 text-sm"
             />
-            <div className="md:col-span-4 flex gap-2">
+            <div className="flex gap-2 md:col-span-4">
               <button
                 type="submit"
                 className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
@@ -149,7 +167,7 @@ export default async function ActivityPage({
                   href={getEntityLink(activity.entity, activity.entityId)}
                   className="block rounded-md p-2 hover:bg-muted/40"
                 >
-                  <div className="flex items-start gap-4 pb-4 border-b last:border-0">
+                  <div className="flex items-start gap-4 border-b pb-4 last:border-0">
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2">
                         <Badge variant={getActionColor(activity.action)}>
@@ -161,9 +179,7 @@ export default async function ActivityPage({
                         </span>
                       </div>
 
-                      {activity.details && (
-                        <p className="text-sm">{activity.details}</p>
-                      )}
+                      {activity.details && <p className="text-sm">{activity.details}</p>}
 
                       <p className="text-xs text-muted-foreground">
                         <DateTimeText
@@ -181,5 +197,5 @@ export default async function ActivityPage({
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

@@ -2,38 +2,53 @@ import { prisma } from "@/lib/prisma"
 import { ReportsFilters } from "@/components/reports-filters"
 import { ReportsCharts } from "@/components/reports-charts"
 import { ReportsTable } from "@/components/reports-table"
-import { startOfMonth, endOfMonth, subMonths, format } from "date-fns"
+import {
+  getDefaultBusinessMonthRange,
+  getTimeZoneLabel,
+  reportQuerySchema,
+  resolveBusinessTimeZone,
+  toBusinessDayEnd,
+  toBusinessDayStart,
+} from "@/lib/business-timezone"
+import { readSystemSettings } from "@/lib/system-settings"
+
+type SearchParams = {
+  startDate?: string
+  endDate?: string
+  productId?: string
+  type?: string
+}
 
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ 
-    startDate?: string
-    endDate?: string
-    productId?: string
-    type?: string
-  }>
+  searchParams: Promise<SearchParams>
 }) {
   const params = await searchParams
-  
-  // Default to current month
-  const startDate = params.startDate 
-    ? new Date(params.startDate)
-    : startOfMonth(new Date())
-  
-  const endDate = params.endDate
-    ? new Date(params.endDate)
-    : endOfMonth(new Date())
+  const settings = await readSystemSettings()
+  const businessTimeZone = resolveBusinessTimeZone(settings.general.timezone)
+  const defaultRange = getDefaultBusinessMonthRange(businessTimeZone)
 
-  const productId = params.productId && params.productId !== "all" ? params.productId : undefined
-  const type = params.type || "all"
+  const parsed = reportQuerySchema.safeParse(params)
+  const validParams = parsed.success ? parsed.data : {}
 
-  // Fetch data based on filters
+  const startDate = validParams.startDate ?? defaultRange.startDate
+  const endDate = validParams.endDate ?? defaultRange.endDate
+
+  const startBoundary = toBusinessDayStart(startDate, businessTimeZone)
+  const endBoundary = toBusinessDayEnd(endDate, businessTimeZone)
+
+  const productId =
+    validParams.productId && validParams.productId !== "all"
+      ? validParams.productId
+      : undefined
+  const type = validParams.type ?? "all"
+
   const whereClause: any = {
     createdAt: {
-      gte: startDate,
-      lte: endDate
-    }
+      gte: startBoundary,
+      lte: endBoundary,
+    },
   }
 
   if (productId) {
@@ -41,48 +56,51 @@ export default async function ReportsPage({
   }
 
   const [stockIns, stockOuts, products] = await Promise.all([
-    type === "all" || type === "in" ? prisma.stockIn.findMany({
-      where: whereClause,
-      include: {
-        product: true,
-        user: {
-          select: {
-            full_name: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    }) : Promise.resolve([]),
-    
-    type === "all" || type === "out" ? prisma.stockOut.findMany({
-      where: whereClause,
-      include: {
-        product: true,
-        user: {
-          select: {
-            full_name: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    }) : Promise.resolve([]),
-    
+    type === "all" || type === "in"
+      ? prisma.stockIn.findMany({
+          where: whereClause,
+          include: {
+            product: true,
+            user: {
+              select: {
+                full_name: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        })
+      : Promise.resolve([]),
+
+    type === "all" || type === "out"
+      ? prisma.stockOut.findMany({
+          where: whereClause,
+          include: {
+            product: true,
+            user: {
+              select: {
+                full_name: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        })
+      : Promise.resolve([]),
+
     prisma.product.findMany({
       select: {
         id: true,
-        name: true
+        name: true,
       },
       orderBy: {
-        name: 'asc'
-      }
-    })
+        name: "asc",
+      },
+    }),
   ])
 
-  // Calculate statistics
   const totalStockInQty = stockIns.reduce((sum, item) => sum + Number(item.quantity), 0)
   const totalStockOutQty = stockOuts.reduce((sum, item) => sum + Number(item.quantity), 0)
 
@@ -90,17 +108,16 @@ export default async function ReportsPage({
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">گزارش‌ها و تحلیل</h2>
-        <p className="text-muted-foreground">
-          تحلیل و بررسی عملیات انبار
-        </p>
+        <p className="text-muted-foreground">تحلیل و بررسی عملیات انبار</p>
       </div>
 
-      <ReportsFilters 
+      <ReportsFilters
         products={products}
-        initialStartDate={format(startDate, 'yyyy-MM-dd')}
-        initialEndDate={format(endDate, 'yyyy-MM-dd')}
+        initialStartDate={startDate}
+        initialEndDate={endDate}
         initialProductId={productId?.toString()}
         initialType={type}
+        timeZoneLabel={getTimeZoneLabel(businessTimeZone)}
       />
 
       <ReportsCharts
@@ -110,10 +127,7 @@ export default async function ReportsPage({
         totalStockOutQty={totalStockOutQty}
       />
 
-      <ReportsTable
-        stockIns={stockIns}
-        stockOuts={stockOuts}
-      />
+      <ReportsTable stockIns={stockIns} stockOuts={stockOuts} />
     </div>
   )
 }

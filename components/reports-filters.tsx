@@ -32,6 +32,7 @@ interface ReportsFiltersProps {
   initialEndDate: string
   initialProductId?: string
   initialType: string
+  timeZoneLabel: string
 }
 
 
@@ -94,6 +95,7 @@ export function ReportsFilters({
   initialEndDate,
   initialProductId,
   initialType,
+  timeZoneLabel,
 }: ReportsFiltersProps) {
   const router = useRouter()
   const [startDate, setStartDate] = useState(initialStartDate)
@@ -160,6 +162,7 @@ export function ReportsFilters({
   return (
     <Card>
       <CardContent className="pt-6">
+        <div className="mb-3 text-xs text-muted-foreground">بازه‌ها بر اساس منطقه زمانی فعال: {timeZoneLabel}</div>
         <div className="grid gap-4 md:grid-cols-5">
           <DatePickerField id="startDate" label="از تاریخ" value={startDate} onChange={setStartDate} />
 
