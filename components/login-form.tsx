@@ -15,6 +15,8 @@ export function LoginForm() {
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const showDevCredentialHint =
+    process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_SHOW_DEV_LOGIN_HINT === "true"
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -91,9 +93,11 @@ export function LoginForm() {
             )}
           </Button>
         </form>
-        <div className="mt-4 text-sm text-center text-muted-foreground">
-          <p>حساب آزمایشی: admin / admin123</p>
-        </div>
+        {showDevCredentialHint ? (
+          <div className="mt-4 text-sm text-center text-muted-foreground">
+            <p>حساب آزمایشی: admin / admin123</p>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )
