@@ -5,6 +5,7 @@ import { validationErrorResponse } from "@/lib/api-validation";
 import { runIdempotentOperation } from "@/lib/idempotency";
 import { externalStockInPayloadSchema } from "@/lib/schemas/inventory";
 import { incrementWarehouseInventory } from "@/lib/inventory-ledger";
+import { resolveMovementQuantityAndWeight } from "@/lib/movement-metrics";
 
 function checkAuth(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -15,21 +16,27 @@ function checkAuth(request: Request) {
 export async function POST(request: Request) {
   try {
     if (!checkAuth(request)) {
-      return NextResponse.json({ error: "Unauthorized - API key required" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized - API key required" },
+        { status: 401 }
+      );
     }
 
     const idempotencyKey = request.headers.get("Idempotency-Key");
     if (!idempotencyKey) {
       return NextResponse.json(
         { error: "Idempotency-Key header is required" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
     const parsed = externalStockInPayloadSchema.parse(await request.json());
 
     if (!parsed.warehouseId) {
-      return NextResponse.json({ error: "warehouseId is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "warehouseId is required" },
+        { status: 400 }
+      );
     }
 
     const result = await runIdempotentOperation(
@@ -57,13 +64,18 @@ export async function POST(request: Request) {
           return { status: 500, body: { error: "System user not found" } };
         }
 
+        const movement = resolveMovementQuantityAndWeight(
+          product,
+          parsed.quantity
+        );
+
         const stockIn = await prisma.$transaction(async (tx) => {
           const createdStockIn = await tx.stockIn.create({
             data: {
               productId: parsed.productId,
               userId: systemUser.id,
-              quantity: parsed.quantity,
-              weight: parsed.quantity,
+              quantity: movement.quantity,
+              weight: movement.weight,
               supplier: parsed.supplier,
               invoiceNumber: parsed.invoiceNumber,
               notes: parsed.notes,
@@ -107,7 +119,7 @@ export async function POST(request: Request) {
             },
           },
         };
-      },
+      }
     );
 
     return NextResponse.json(result.body, { status: result.status });
@@ -117,6 +129,9 @@ export async function POST(request: Request) {
     }
 
     console.error("[v0] External API error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

@@ -5,6 +5,7 @@ import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
 import { stockInPayloadSchema } from "@/lib/schemas/inventory";
 import { incrementWarehouseInventory } from "@/lib/inventory-ledger";
+import { resolveMovementQuantityAndWeight } from "@/lib/movement-metrics";
 
 export async function POST(request: Request) {
   try {
@@ -16,7 +17,10 @@ export async function POST(request: Request) {
     const parsed = stockInPayloadSchema.parse(await request.json());
 
     if (!parsed.warehouseId) {
-      return NextResponse.json({ error: "warehouseId is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "warehouseId is required" },
+        { status: 400 }
+      );
     }
 
     const [product, warehouse] = await Promise.all([
@@ -29,16 +33,21 @@ export async function POST(request: Request) {
     }
 
     if (!warehouse) {
-      return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Warehouse not found" },
+        { status: 404 }
+      );
     }
+
+    const movement = resolveMovementQuantityAndWeight(product, parsed.quantity);
 
     const stockIn = await prisma.$transaction(async (tx) => {
       const createdStockIn = await tx.stockIn.create({
         data: {
           productId: parsed.productId,
           userId: (session.user as any).id,
-          quantity: parsed.quantity,
-          weight: parsed.quantity,
+          quantity: movement.quantity,
+          weight: movement.weight,
           supplier: parsed.supplier,
           invoiceNumber: parsed.invoiceNumber,
           sourceDocumentType: parsed.sourceDocumentType,
@@ -89,6 +98,9 @@ export async function POST(request: Request) {
     }
 
     console.error("[v0] Error creating stock in:", error);
-    return NextResponse.json({ error: "Failed to create stock in" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create stock in" },
+      { status: 500 }
+    );
   }
 }
