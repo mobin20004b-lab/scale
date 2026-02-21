@@ -42,6 +42,8 @@ model Product {
   updatedAt     DateTime   @updatedAt
   stockIns      StockIn[]
   stockOuts     StockOut[]
+  warehouseBalances WarehouseInventoryBalance[]
+  inventoryLedgerEntries InventoryLedgerEntry[]
   barcodes      ProductBarcode[]
   unknownBarcodeEvents UnknownBarcodeEvent[]
 
@@ -114,6 +116,7 @@ model StockIn {
   scale         Scale?     @relation(fields: [scaleId], references: [id])
   user          User       @relation(fields: [userId], references: [id])
   warehouse     Warehouse? @relation(fields: [warehouseId], references: [id])
+  inventoryLedgerEntries InventoryLedgerEntry[]
 
   @@index([productId])
   @@index([userId])
@@ -133,6 +136,8 @@ model Warehouse {
   scales      Scale[]
   stockIns    StockIn[]
   stockOuts   StockOut[]
+  inventoryBalances WarehouseInventoryBalance[]
+  inventoryLedgerEntries InventoryLedgerEntry[]
 
   @@map("warehouses")
 }
@@ -175,6 +180,7 @@ model StockOut {
   product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   user          User     @relation(fields: [userId], references: [id])
   warehouse     Warehouse? @relation(fields: [warehouseId], references: [id])
+  inventoryLedgerEntries InventoryLedgerEntry[]
 
   @@index([productId])
   @@index([userId])
@@ -269,4 +275,48 @@ model IdempotencyRecord {
   @@unique([key, endpoint])
   @@index([expiresAt])
   @@map("idempotency_records")
+}
+
+model WarehouseInventoryBalance {
+  id          String   @id @default(cuid())
+  productId   String
+  warehouseId String
+  lotBatch    String   @default("")
+  quantity    Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, warehouseId, lotBatch])
+  @@index([warehouseId])
+  @@index([productId])
+  @@map("warehouse_inventory_balances")
+}
+
+model InventoryLedgerEntry {
+  id          String @id @default(cuid())
+  productId   String
+  warehouseId String
+  lotBatch    String   @default("")
+  quantityDelta Float
+  movementType InventoryMovementType
+  stockInId   String?
+  stockOutId  String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stockIn     StockIn? @relation(fields: [stockInId], references: [id], onDelete: SetNull)
+  stockOut    StockOut? @relation(fields: [stockOutId], references: [id], onDelete: SetNull)
+
+  @@index([productId, warehouseId, createdAt])
+  @@index([movementType, createdAt])
+  @@map("inventory_ledger_entries")
+}
+
+enum InventoryMovementType {
+  STOCK_IN
+  STOCK_OUT
+  STOCK_OUT_UNDO
 }

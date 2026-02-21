@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
 import { stockInPayloadSchema } from "@/lib/schemas/inventory";
+import { incrementWarehouseInventory } from "@/lib/inventory-ledger";
 
 export async function POST(request: Request) {
   try {
@@ -14,12 +15,21 @@ export async function POST(request: Request) {
 
     const parsed = stockInPayloadSchema.parse(await request.json());
 
-    const product = await prisma.product.findUnique({
-      where: { id: parsed.productId },
-    });
+    if (!parsed.warehouseId) {
+      return NextResponse.json({ error: "warehouseId is required" }, { status: 400 });
+    }
+
+    const [product, warehouse] = await Promise.all([
+      prisma.product.findUnique({ where: { id: parsed.productId } }),
+      prisma.warehouse.findUnique({ where: { id: parsed.warehouseId } }),
+    ]);
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
+    if (!warehouse) {
+      return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
     }
 
     const stockIn = await prisma.$transaction(async (tx) => {
@@ -38,7 +48,7 @@ export async function POST(request: Request) {
           supplierLot: parsed.supplierLot,
           qualityResult: parsed.qualityResult,
           notes: parsed.notes,
-          warehouseId: parsed.warehouseId || null,
+          warehouseId: parsed.warehouseId,
           scaleId: parsed.scaleId || null,
           scaleWeight: parsed.scaleWeight,
           capturedAt: parsed.capturedAt ? new Date(parsed.capturedAt) : null,
@@ -50,13 +60,13 @@ export async function POST(request: Request) {
         },
       });
 
-      await tx.product.update({
-        where: { id: parsed.productId },
-        data: {
-          currentStock: {
-            increment: parsed.quantity,
-          },
-        },
+      await incrementWarehouseInventory(tx, {
+        productId: parsed.productId,
+        warehouseId: parsed.warehouseId,
+        quantity: parsed.quantity,
+        lotBatch: parsed.lotBatch,
+        stockInId: createdStockIn.id,
+        notes: parsed.notes,
       });
 
       await tx.activity.create({
@@ -65,7 +75,7 @@ export async function POST(request: Request) {
           action: "ورود کالا",
           entity: "StockIn",
           entityId: createdStockIn.id,
-          details: `${parsed.quantity} ${product.unit} از "${product.name}" به انبار اضافه شد`,
+          details: `${parsed.quantity} ${product.unit} از "${product.name}" به انبار "${warehouse.name}" اضافه شد`,
         },
       });
 

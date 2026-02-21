@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { revertWarehouseStockOut } from "@/lib/inventory-ledger";
 
 const UNDO_WINDOW_MS = 5 * 60 * 1000;
 
@@ -29,6 +30,10 @@ export async function POST(
       return NextResponse.json({ error: "Stock-out not found" }, { status: 404 });
     }
 
+    if (!stockOut.warehouseId) {
+      return NextResponse.json({ error: "Cannot undo legacy stock-out without warehouse context" }, { status: 409 });
+    }
+
     if (Date.now() - stockOut.createdAt.getTime() > UNDO_WINDOW_MS) {
       return NextResponse.json(
         { error: "Undo window has expired" },
@@ -37,13 +42,12 @@ export async function POST(
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.product.update({
-        where: { id: stockOut.productId },
-        data: {
-          currentStock: {
-            increment: stockOut.quantity,
-          },
-        },
+      await revertWarehouseStockOut(tx, {
+        productId: stockOut.productId,
+        warehouseId: stockOut.warehouseId!,
+        quantity: stockOut.quantity,
+        stockOutId: stockOut.id,
+        notes: "Undo stock-out",
       });
 
       await tx.stockOut.delete({ where: { id: stockOut.id } });
