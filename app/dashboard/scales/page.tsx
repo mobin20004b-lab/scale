@@ -4,9 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getScaleHealthSnapshot } from "@/lib/scale-health";
 import { prisma } from "@/lib/prisma";
 import { finalizeDueDeletes } from "@/lib/deletion-lifecycle";
+import { getDictionary, getSessionLocale } from "@/lib/i18n";
 
 export default async function ScalesPage() {
   await finalizeDueDeletes("scale");
+
+  const locale = await getSessionLocale();
+  const t = getDictionary(locale);
 
   const [scales, warehouses] = await Promise.all([
     prisma.scale.findMany({
@@ -41,7 +45,7 @@ export default async function ScalesPage() {
   const firmwareMap = scales.reduce<Record<string, Record<string, number>>>(
     (acc, scale) => {
       const warehouse = scale.warehouse.name;
-      const version = scale.firmwareVersion || "unknown";
+      const version = scale.firmwareVersion || t.common.unknown;
       if (!acc[warehouse]) acc[warehouse] = {};
       acc[warehouse][version] = (acc[warehouse][version] || 0) + 1;
       return acc;
@@ -64,19 +68,19 @@ export default async function ScalesPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Online</CardTitle>
+            <CardTitle className="text-sm">{t.scales.online}</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">{fleetStatus.ONLINE}</CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Stale</CardTitle>
+            <CardTitle className="text-sm">{t.scales.stale}</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">{fleetStatus.STALE}</CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Offline</CardTitle>
+            <CardTitle className="text-sm">{t.scales.offline}</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">{fleetStatus.OFFLINE}</CardContent>
         </Card>
@@ -84,7 +88,7 @@ export default async function ScalesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Fleet Firmware Map by Warehouse</CardTitle>
+          <CardTitle>{t.scales.fleetFirmwareMap}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {Object.entries(firmwareMap).map(([warehouse, versions]) => (

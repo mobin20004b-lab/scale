@@ -4,13 +4,15 @@ import { useState } from "react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import type { Locale } from "@/lib/i18n"
 
 interface DashboardShellProps {
   user: any
+  locale: Locale
   children: React.ReactNode
 }
 
-export function DashboardShell({ user, children }: DashboardShellProps) {
+export function DashboardShell({ user, locale, children }: DashboardShellProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   return (
@@ -27,7 +29,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
       </Sheet>
 
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-        <DashboardHeader user={user} onOpenMobileNav={() => setMobileNavOpen(true)} />
+        <DashboardHeader user={user} locale={locale} onOpenMobileNav={() => setMobileNavOpen(true)} />
         <main className="flex-1 overflow-y-auto bg-muted/30 p-4 md:p-6">{children}</main>
       </div>
     </div>

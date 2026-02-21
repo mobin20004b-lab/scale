@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Check, Code, Copy, Database, Key, Lock, Settings, Shield, UserCog, Users } from "lucide-react"
+import { DEFAULT_LOCALE, getDictionary } from "@/lib/i18n"
 
 type UserRole = "ADMIN" | "USER" | "VIEWER"
 
@@ -50,6 +51,8 @@ const apiEndpoints = [
 ]
 
 export default function SettingsPage() {
+  const t = getDictionary(DEFAULT_LOCALE)
+
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [users, setUsers] = useState<UserItem[]>([])
@@ -426,7 +429,7 @@ export default function SettingsPage() {
                   <p className="text-sm font-medium">چاپ تست لیبل</p>
                   <p className="text-xs text-muted-foreground">برای بررسی سریع چاپگر حرارتی و قالب نسخه v1</p>
                 </div>
-                <Button type="button" variant="outline" onClick={() => void printTestLabel()}>Print test label</Button>
+                <Button type="button" variant="outline" onClick={() => void printTestLabel()}>{t.common.printTestLabel}</Button>
               </div>
             </CardContent>
           </Card>
