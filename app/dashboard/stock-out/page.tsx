@@ -16,6 +16,12 @@ export default async function StockOutPage({
           gt: 0,
         },
       },
+      include: {
+        barcodes: {
+          where: { status: "ACTIVE" },
+          select: { code: true, status: true },
+        },
+      },
       orderBy: { name: "asc" },
     }),
     prisma.stockOut.findMany({

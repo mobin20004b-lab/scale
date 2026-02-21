@@ -1,24 +1,33 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Html5Qrcode } from "html5-qrcode"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/components/ui/input"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { X, Camera, CheckCircle2, RefreshCw, TriangleAlert } from "lucide-react"
+import { X, Camera, CheckCircle2, RefreshCw, TriangleAlert, Flashlight, FlashlightOff, RotateCcw } from "lucide-react"
+import { normalizeBarcode } from "@/lib/barcode"
 
 interface BarcodeScannerProps {
   onScan: (code: string) => void
   onStatusChange?: (status: "idle" | "scanning" | "success" | "error") => void
+  debounceMs?: number
 }
 
-export function BarcodeScanner({ onScan, onStatusChange }: BarcodeScannerProps) {
+export function BarcodeScanner({ onScan, onStatusChange, debounceMs = 1200 }: BarcodeScannerProps) {
   const [isScanning, setIsScanning] = useState(false)
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
+  const [lastScanAt, setLastScanAt] = useState(0)
+  const [lastScanNormalized, setLastScanNormalized] = useState<string | null>(null)
+  const [manualEntry, setManualEntry] = useState("")
+  const [cameraFacingMode, setCameraFacingMode] = useState<"environment" | "user">("environment")
+  const [torchEnabled, setTorchEnabled] = useState(false)
+  const [zoom, setZoom] = useState(1)
 
   useEffect(() => {
     return () => {
@@ -28,34 +37,45 @@ export function BarcodeScanner({ onScan, onStatusChange }: BarcodeScannerProps) 
     }
   }, [])
 
+  const scannerId = useMemo(() => "qr-reader", [])
+
   const startScanning = async () => {
     try {
       setIsStarting(true)
       setError(null)
       onStatusChange?.("scanning")
-      const scanner = new Html5Qrcode("qr-reader")
+      const scanner = new Html5Qrcode(scannerId)
       scannerRef.current = scanner
 
       await scanner.start(
-        { facingMode: "environment" },
+        { facingMode: cameraFacingMode },
         {
           fps: 10,
-          qrbox: { width: 250, height: 250 }
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.2,
         },
         (decodedText) => {
-          setLastScannedCode(decodedText)
+          const normalized = normalizeBarcode(decodedText)
+          const now = Date.now()
+          if (lastScanNormalized === normalized.normalized && now - lastScanAt < debounceMs) {
+            return
+          }
+
+          setLastScanAt(now)
+          setLastScanNormalized(normalized.normalized)
+          setLastScannedCode(normalized.normalized)
           onStatusChange?.("success")
-          onScan(decodedText)
+          onScan(normalized.normalized)
           stopScanning()
         },
         () => {
-          // Error callback - ignore
+          // ignore frame level decode errors
         }
       )
 
       setIsScanning(true)
     } catch (err) {
-      console.error('[v0] Error starting scanner:', err)
+      console.error("[v0] Error starting scanner:", err)
       setError("خطا در دسترسی به دوربین. لطفا دسترسی را بررسی کنید.")
       onStatusChange?.("error")
     } finally {
@@ -70,9 +90,22 @@ export function BarcodeScanner({ onScan, onStatusChange }: BarcodeScannerProps) 
         setIsScanning(false)
         onStatusChange?.("idle")
       } catch (err) {
-        console.error('[v0] Error stopping scanner:', err)
+        console.error("[v0] Error stopping scanner:", err)
       }
     }
+  }
+
+  const handleSubmitManual = () => {
+    const normalized = normalizeBarcode(manualEntry)
+    if (!normalized.normalized) {
+      setError("بارکد وارد شده معتبر نیست.")
+      return
+    }
+
+    setLastScannedCode(normalized.normalized)
+    onStatusChange?.("success")
+    onScan(normalized.normalized)
+    setManualEntry("")
   }
 
   return (
@@ -98,7 +131,29 @@ export function BarcodeScanner({ onScan, onStatusChange }: BarcodeScannerProps) 
         ) : (
           <>
             {isStarting && <Skeleton className="h-52 w-full" />}
-            <div id="qr-reader" className="w-full rounded-lg overflow-hidden ring-2 ring-primary/40" />
+            <div id={scannerId} className="w-full rounded-lg overflow-hidden ring-2 ring-primary/40" />
+            <div className="grid grid-cols-3 gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setTorchEnabled((v) => !v)}>
+                {torchEnabled ? <FlashlightOff className="ml-2 size-4" /> : <Flashlight className="ml-2 size-4" />} مشعل
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setCameraFacingMode((prev) => (prev === "environment" ? "user" : "environment"))
+                  stopScanning().then(startScanning)
+                }}
+              >
+                <RotateCcw className="ml-2 size-4" /> دوربین
+              </Button>
+              <Input
+                value={zoom}
+                onChange={(event) => setZoom(Number(event.target.value) || 1)}
+                aria-label="zoom"
+                className="h-9"
+              />
+            </div>
             <p className="text-xs text-primary text-center" role="status" aria-live="polite">
               دوربین فعال است؛ بارکد را مقابل دوربین نگه دارید.
             </p>
@@ -114,6 +169,14 @@ export function BarcodeScanner({ onScan, onStatusChange }: BarcodeScannerProps) 
             </Button>
           </>
         )}
+
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="text-xs text-muted-foreground">ورودی دستی (Wedge/Handheld)</p>
+          <div className="flex gap-2">
+            <Input value={manualEntry} onChange={(event) => setManualEntry(event.target.value)} dir="ltr" placeholder="paste / type barcode" />
+            <Button type="button" variant="outline" onClick={handleSubmitManual}>ثبت</Button>
+          </div>
+        </div>
 
         {lastScannedCode && !isScanning && !error && (
           <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200 flex items-center gap-2">

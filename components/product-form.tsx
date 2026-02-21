@@ -51,6 +51,8 @@ export function ProductForm({ product }: ProductFormProps) {
           name: product.name,
           sku: product.sku || "",
           barcode: product.barcode || "",
+          barcodeAliases: (product.barcodes || []).map((b: any) => b.code).join(", "),
+          barcodeIssuer: "",
           category: product.category || "",
           unit: product.unit,
           minStock: product.minStock.toString(),
@@ -60,6 +62,8 @@ export function ProductForm({ product }: ProductFormProps) {
       : {
           unit: "کیلوگرم",
           weightPerUnit: "",
+          barcodeAliases: "",
+          barcodeIssuer: "",
         },
   });
 
@@ -132,6 +136,8 @@ export function ProductForm({ product }: ProductFormProps) {
           ...data,
           minStock: parseFloat(data.minStock),
           weightPerUnit: parseFloat(data.weightPerUnit),
+          barcodeAliases: (data.barcodeAliases || "").split(",").map((item) => item.trim()).filter(Boolean),
+          barcodeIssuer: data.barcodeIssuer || undefined,
         }),
       });
 
@@ -224,6 +230,27 @@ export function ProductForm({ product }: ProductFormProps) {
                 {...register("barcode")}
                 disabled={isLoading}
                 dir="ltr"
+              />
+            </FormField>
+
+
+            <FormField id="barcodeAliases" label="بارکدهای جایگزین">
+              <Input
+                id="barcodeAliases"
+                {...register("barcodeAliases")}
+                disabled={isLoading}
+                dir="ltr"
+                placeholder="alias1, alias2"
+              />
+            </FormField>
+
+            <FormField id="barcodeIssuer" label="صادرکننده بارکد">
+              <Input
+                id="barcodeIssuer"
+                {...register("barcodeIssuer")}
+                disabled={isLoading}
+                dir="rtl"
+                placeholder="داخلی / تامین‌کننده"
               />
             </FormField>
 

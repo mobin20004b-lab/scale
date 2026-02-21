@@ -42,8 +42,46 @@ model Product {
   updatedAt     DateTime   @updatedAt
   stockIns      StockIn[]
   stockOuts     StockOut[]
+  barcodes      ProductBarcode[]
+  unknownBarcodeEvents UnknownBarcodeEvent[]
 
   @@map("products")
+}
+
+model ProductBarcode {
+  id            String   @id @default(cuid())
+  productId     String
+  code          String   @unique
+  identifierType BarcodeIdentifierType @default(PRODUCT_STATIC)
+  symbology     BarcodeSymbology @default(CODE_128)
+  status        BarcodeStatus @default(ACTIVE)
+  issuer        String?
+  generatedAt   DateTime @default(now())
+  checksumValid Boolean?
+  retiredAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, status])
+  @@map("product_barcodes")
+}
+
+model UnknownBarcodeEvent {
+  id             String   @id @default(cuid())
+  rawCode        String
+  normalizedCode String
+  source         String?
+  status         UnknownBarcodeStatus @default(OPEN)
+  notes          String?
+  mappedProductId String?
+  createdAt      DateTime @default(now())
+  resolvedAt     DateTime?
+  mappedProduct  Product? @relation(fields: [mappedProductId], references: [id], onDelete: SetNull)
+
+  @@index([normalizedCode])
+  @@index([status])
+  @@map("unknown_barcode_events")
 }
 
 model StockIn {
@@ -164,6 +202,32 @@ enum UserRole {
   ADMIN
   USER
   VIEWER
+}
+
+enum BarcodeStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum BarcodeIdentifierType {
+  PRODUCT_STATIC
+  PACKAGE_DYNAMIC
+  LOT_DYNAMIC
+  SUPPLIER_ALIAS
+}
+
+enum BarcodeSymbology {
+  EAN_13
+  EAN_8
+  CODE_128
+  QR
+  UNKNOWN
+}
+
+enum UnknownBarcodeStatus {
+  OPEN
+  TEMP_RECEIVING
+  MAPPED
 }
 
 model IdempotencyRecord {

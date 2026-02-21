@@ -11,6 +11,12 @@ export default async function StockInPage({
 
   const [products, recentStockIns, warehouses, scales] = await Promise.all([
     prisma.product.findMany({
+      include: {
+        barcodes: {
+          where: { status: "ACTIVE" },
+          select: { code: true, status: true },
+        },
+      },
       orderBy: { name: "asc" },
     }),
     prisma.stockIn.findMany({

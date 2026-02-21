@@ -22,6 +22,7 @@ import { BarcodeScanner } from "./barcode-scanner";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { stockInFormSchema } from "@/lib/schemas/inventory";
+import { findProductByScannedBarcode } from "@/lib/product-barcode";
 import { formatScaleWeight } from "@/lib/scale-reading";
 import { EmptyStatePanel } from "@/components/ui/async-state";
 import { Badge } from "@/components/ui/badge";
@@ -340,8 +341,8 @@ export function StockInForm({
     return () => window.removeEventListener("keydown", handler);
   }, [isSubmitDisabled]);
 
-  const handleBarcodeScanned = (barcode: string) => {
-    const product = products.find((p) => p.barcode === barcode);
+  const handleBarcodeScanned = async (barcode: string) => {
+    const product = findProductByScannedBarcode(products, barcode);
     if (product) {
       setValue("productId", product.id.toString(), {
         shouldDirty: true,
@@ -353,7 +354,12 @@ export function StockInForm({
       toast.success(`محصول پیدا شد: ${product.name}`);
       setFocus("quantity");
     } else {
-      toast.error("محصولی با این بارکد یافت نشد");
+      await fetch("/api/barcodes/unknown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ barcode, source: "stock-in" }),
+      }).catch(() => null);
+      toast.error("محصولی با این بارکد یافت نشد؛ مورد در لیست بارکدهای ناشناخته ثبت شد.");
     }
   };
 

@@ -25,6 +25,8 @@ export const productFormSchema = z.object({
   name: requiredText("نام محصول الزامی است"),
   sku: z.string().optional(),
   barcode: z.string().optional(),
+  barcodeAliases: z.string().optional(),
+  barcodeIssuer: z.string().optional(),
   category: z.string().optional(),
   unit: requiredText("واحد اندازه‌گیری الزامی است"),
   minStock: z
@@ -44,6 +46,8 @@ export const productPayloadSchema = z.object({
   name: requiredText("نام محصول الزامی است"),
   sku: optionalText,
   barcode: optionalNullableText,
+  barcodeAliases: z.array(z.string().trim()).optional().default([]),
+  barcodeIssuer: optionalNullableText,
   category: optionalText,
   unit: requiredText("واحد اندازه‌گیری الزامی است"),
   minStock: z.coerce.number().min(0, "حداقل موجودی باید مثبت باشد"),
