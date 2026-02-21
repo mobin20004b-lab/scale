@@ -107,7 +107,7 @@ export const stockOutPayloadSchema = z.object({
   customer: optionalNullableText,
   invoiceNumber: optionalNullableText,
   notes: optionalNullableText,
-  warehouseId: z.string().trim().optional().nullable(),
+  warehouseId: requiredText("انبار را انتخاب کنید"),
 });
 
 export const externalStockInPayloadSchema = stockInPayloadSchema.pick({
@@ -116,6 +116,8 @@ export const externalStockInPayloadSchema = stockInPayloadSchema.pick({
   supplier: true,
   invoiceNumber: true,
   notes: true,
+  warehouseId: true,
+  lotBatch: true,
 });
 
 export const externalStockOutPayloadSchema = stockOutPayloadSchema;

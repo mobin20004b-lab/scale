@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveBarcodeForStockOut } from "@/lib/barcode-resolver";
 import { runIdempotentOperation } from "@/lib/idempotency";
+import { decrementWarehouseInventory, InventoryConflictError } from "@/lib/inventory-ledger";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -26,6 +27,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "barcode is required" }, { status: 400 });
   }
 
+  if (!body.warehouseId?.trim()) {
+    return NextResponse.json({ error: "warehouseId is required" }, { status: 400 });
+  }
+
   const result = await runIdempotentOperation("/api/stock-out/scan", idempotencyKey, async () => {
     const resolved = await resolveBarcodeForStockOut(body.barcode!);
 
@@ -36,7 +41,19 @@ export async function POST(request: Request) {
       };
     }
 
-    const product = await prisma.product.findUnique({ where: { id: resolved.productId } });
+    const [product, warehouseBalance] = await Promise.all([
+      prisma.product.findUnique({ where: { id: resolved.productId } }),
+      prisma.warehouseInventoryBalance.findUnique({
+        where: {
+          productId_warehouseId_lotBatch: {
+            productId: resolved.productId,
+            warehouseId: body.warehouseId!,
+            lotBatch: "",
+          },
+        },
+      }),
+    ]);
+
     if (!product) {
       return {
         status: 404,
@@ -53,7 +70,7 @@ export async function POST(request: Request) {
       };
     }
 
-    if (Number(product.currentStock) < requestedQuantity) {
+    if (Number(warehouseBalance?.quantity ?? 0) < requestedQuantity) {
       return {
         status: 409,
         body: {
@@ -82,51 +99,70 @@ export async function POST(request: Request) {
       };
     }
 
-    const stockOut = await prisma.$transaction(async (tx) => {
-      const created = await tx.stockOut.create({
-        data: {
+    try {
+      const stockOut = await prisma.$transaction(async (tx) => {
+        const created = await tx.stockOut.create({
+          data: {
+            productId: product.id,
+            userId: (session.user as any).id,
+            quantity: requestedQuantity,
+            weight: requestedQuantity,
+            warehouseId: body.warehouseId,
+            notes: `scan:${resolved.barcode};type:${resolved.kind};lot:${resolved.lotNumber ?? "-"}`,
+          },
+        });
+
+        await decrementWarehouseInventory(tx, {
           productId: product.id,
-          userId: (session.user as any).id,
+          warehouseId: body.warehouseId!,
           quantity: requestedQuantity,
-          weight: requestedQuantity,
-          warehouseId: body.warehouseId || null,
-          notes: `scan:${resolved.barcode};type:${resolved.kind};lot:${resolved.lotNumber ?? "-"}`,
-        },
+          stockOutId: created.id,
+          notes: created.notes,
+        });
+
+        await tx.activity.create({
+          data: {
+            userId: (session.user as any).id,
+            action: "خروج کالا با اسکن",
+            entity: "StockOut",
+            entityId: created.id,
+            details: `${requestedQuantity} ${product.unit} از ${product.name} با بارکد ${resolved.barcode}`,
+          },
+        });
+
+        return created;
       });
 
-      await tx.product.update({
-        where: { id: product.id },
-        data: { currentStock: { decrement: requestedQuantity } },
-      });
-
-      await tx.activity.create({
-        data: {
-          userId: (session.user as any).id,
-          action: "خروج کالا با اسکن",
-          entity: "StockOut",
-          entityId: created.id,
-          details: `${requestedQuantity} ${product.unit} از ${product.name} با بارکد ${resolved.barcode}`,
+      return {
+        status: 201,
+        body: {
+          id: stockOut.id,
+          resolved: {
+            productId: product.id,
+            productName: product.name,
+            barcodeType: resolved.kind,
+            lotNumber: resolved.lotNumber,
+          },
+          quantity: requestedQuantity,
+          validation: "ok",
+          actionHint: "committed",
         },
-      });
+      };
+    } catch (error) {
+      if (error instanceof InventoryConflictError) {
+        return {
+          status: 409,
+          body: {
+            resolved: { productId: product.id, lotNumber: resolved.lotNumber },
+            quantity: requestedQuantity,
+            validation: "insufficient_stock",
+            actionHint: "review_stock",
+          },
+        };
+      }
 
-      return created;
-    });
-
-    return {
-      status: 201,
-      body: {
-        id: stockOut.id,
-        resolved: {
-          productId: product.id,
-          productName: product.name,
-          barcodeType: resolved.kind,
-          lotNumber: resolved.lotNumber,
-        },
-        quantity: requestedQuantity,
-        validation: "ok",
-        actionHint: "committed",
-      },
-    };
+      throw error;
+    }
   });
 
   return NextResponse.json(result.body, { status: result.status });

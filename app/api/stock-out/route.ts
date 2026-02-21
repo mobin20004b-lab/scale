@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
 import { stockOutPayloadSchema } from "@/lib/schemas/inventory";
+import { decrementWarehouseInventory, InventoryConflictError } from "@/lib/inventory-ledger";
 
 export async function POST(request: Request) {
   try {
@@ -14,26 +15,14 @@ export async function POST(request: Request) {
 
     const parsed = stockOutPayloadSchema.parse(await request.json());
 
-    if (parsed.warehouseId) {
-      const warehouse = await prisma.warehouse.findUnique({
-        where: { id: parsed.warehouseId },
-      });
-
-      if (!warehouse) {
-        return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
-      }
+    const warehouse = await prisma.warehouse.findUnique({ where: { id: parsed.warehouseId } });
+    if (!warehouse) {
+      return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
     }
 
-    const product = await prisma.product.findUnique({
-      where: { id: parsed.productId },
-    });
-
+    const product = await prisma.product.findUnique({ where: { id: parsed.productId } });
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    }
-
-    if (Number(product.currentStock) < parsed.quantity) {
-      return NextResponse.json({ error: "Insufficient quantity available" }, { status: 400 });
     }
 
     const stockOut = await prisma.$transaction(async (tx) => {
@@ -46,17 +35,16 @@ export async function POST(request: Request) {
           customer: parsed.customer,
           invoiceNumber: parsed.invoiceNumber,
           notes: parsed.notes,
-          warehouseId: parsed.warehouseId || null,
+          warehouseId: parsed.warehouseId,
         },
       });
 
-      await tx.product.update({
-        where: { id: parsed.productId },
-        data: {
-          currentStock: {
-            decrement: parsed.quantity,
-          },
-        },
+      await decrementWarehouseInventory(tx, {
+        productId: parsed.productId,
+        warehouseId: parsed.warehouseId,
+        quantity: parsed.quantity,
+        stockOutId: createdStockOut.id,
+        notes: parsed.notes,
       });
 
       await tx.activity.create({
@@ -65,7 +53,7 @@ export async function POST(request: Request) {
           action: "خروج کالا",
           entity: "StockOut",
           entityId: createdStockOut.id,
-          details: `${parsed.quantity} ${product.unit} از "${product.name}" از انبار خارج شد`,
+          details: `${parsed.quantity} ${product.unit} از "${product.name}" از انبار "${warehouse.name}" خارج شد`,
         },
       });
 
@@ -76,6 +64,10 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof ZodError) {
       return validationErrorResponse(error);
+    }
+
+    if (error instanceof InventoryConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
     console.error("[v0] Error creating stock out:", error);

@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
 import { runIdempotentOperation } from "@/lib/idempotency";
 import { externalStockInPayloadSchema } from "@/lib/schemas/inventory";
+import { incrementWarehouseInventory } from "@/lib/inventory-ledger";
 
 function checkAuth(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -27,16 +28,25 @@ export async function POST(request: Request) {
 
     const parsed = externalStockInPayloadSchema.parse(await request.json());
 
+    if (!parsed.warehouseId) {
+      return NextResponse.json({ error: "warehouseId is required" }, { status: 400 });
+    }
+
     const result = await runIdempotentOperation(
       "external-stock-in",
       idempotencyKey,
       async () => {
-        const product = await prisma.product.findUnique({
-          where: { id: parsed.productId },
-        });
+        const [product, warehouse] = await Promise.all([
+          prisma.product.findUnique({ where: { id: parsed.productId } }),
+          prisma.warehouse.findUnique({ where: { id: parsed.warehouseId } }),
+        ]);
 
         if (!product) {
           return { status: 404, body: { error: "Product not found" } };
+        }
+
+        if (!warehouse) {
+          return { status: 404, body: { error: "Warehouse not found" } };
         }
 
         const systemUser = await prisma.user.findFirst({
@@ -57,16 +67,18 @@ export async function POST(request: Request) {
               supplier: parsed.supplier,
               invoiceNumber: parsed.invoiceNumber,
               notes: parsed.notes,
+              warehouseId: parsed.warehouseId,
+              lotBatch: parsed.lotBatch,
             },
           });
 
-          await tx.product.update({
-            where: { id: parsed.productId },
-            data: {
-              currentStock: {
-                increment: parsed.quantity,
-              },
-            },
+          await incrementWarehouseInventory(tx, {
+            productId: parsed.productId,
+            warehouseId: parsed.warehouseId,
+            quantity: parsed.quantity,
+            lotBatch: parsed.lotBatch,
+            stockInId: createdStockIn.id,
+            notes: parsed.notes,
           });
 
           await tx.activity.create({
