@@ -34,11 +34,14 @@ export async function GET(request: Request) {
         tare: true,
         unit: true,
         precision: true,
+        heartbeatIntervalSec: true,
       },
     });
 
     const scalesWithHealth = scales.map((scale) => {
-      const healthSnapshot = getScaleHealthSnapshot(scale.lastWeightAt);
+      const healthSnapshot = getScaleHealthSnapshot(scale.lastWeightAt, {
+        heartbeatIntervalSec: scale.heartbeatIntervalSec,
+      });
 
       return {
         ...scale,

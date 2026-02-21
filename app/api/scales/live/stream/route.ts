@@ -39,6 +39,7 @@ export async function GET(request: Request) {
       tare: true,
       unit: true,
       precision: true,
+      heartbeatIntervalSec: true,
     },
   });
 
@@ -51,7 +52,9 @@ export async function GET(request: Request) {
           createSseEvent(
             "snapshot",
             scales.map((scale) => {
-              const health = getScaleHealthSnapshot(scale.lastWeightAt);
+              const health = getScaleHealthSnapshot(scale.lastWeightAt, {
+                heartbeatIntervalSec: scale.heartbeatIntervalSec,
+              });
               return {
                 ...scale,
                 health: health.health,

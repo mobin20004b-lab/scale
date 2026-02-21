@@ -24,6 +24,7 @@ export async function GET(
         tare: true,
         unit: true,
         precision: true,
+        heartbeatIntervalSec: true,
       },
     });
 
@@ -82,6 +83,7 @@ export async function POST(
         tare: true,
         unit: true,
         precision: true,
+        heartbeatIntervalSec: true,
       },
       data: {
         lastWeight: weight,

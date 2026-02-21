@@ -132,7 +132,9 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
 
   const visibleScales = useMemo(() => {
     return localScales.filter((scale) => {
-      const health = getScaleHealthSnapshot(scale.lastWeightAt).health;
+      const health = getScaleHealthSnapshot(scale.lastWeightAt, {
+        heartbeatIntervalSec: scale.heartbeatIntervalSec,
+      }).health;
       const matchesSearch = scale.name
         .toLowerCase()
         .includes(search.trim().toLowerCase());
@@ -541,7 +543,10 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           const lastWeight = live?.lastWeight ?? scale.lastWeight;
           const lastWeightAt = live?.lastWeightAt ?? scale.lastWeightAt;
           const health =
-            live?.health ?? getScaleHealthSnapshot(scale.lastWeightAt).health;
+            live?.health ??
+            getScaleHealthSnapshot(scale.lastWeightAt, {
+              heartbeatIntervalSec: scale.heartbeatIntervalSec,
+            }).health;
           const healthLabel =
             health === "ONLINE"
               ? "آنلاین"
@@ -554,9 +559,9 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
               : health === "STALE"
                 ? "secondary"
                 : "destructive";
-          const fallbackAgeMs = getScaleHealthSnapshot(
-            scale.lastWeightAt
-          ).lastReadingAgeMs;
+          const fallbackAgeMs = getScaleHealthSnapshot(scale.lastWeightAt, {
+            heartbeatIntervalSec: scale.heartbeatIntervalSec,
+          }).lastReadingAgeMs;
           const ageMs = live?.lastReadingAgeMs ?? fallbackAgeMs;
           const healthAgeLabel =
             ageMs === null
