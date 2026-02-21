@@ -8,7 +8,7 @@ export default async function WarehousesPage() {
   const warehouses = await prisma.warehouse.findMany({
     include: {
       _count: {
-        select: { scales: true, stockIns: true },
+        select: { scales: true, stockIns: true, stockOuts: true },
       },
     },
     orderBy: { createdAt: "desc" },
