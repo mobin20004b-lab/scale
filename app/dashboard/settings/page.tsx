@@ -165,6 +165,32 @@ export default function SettingsPage() {
     setTimeout(() => setLastCopied((current) => (current === key ? null : current)), 1800)
   }
 
+
+  const printTestLabel = async () => {
+    const response = await fetch("/api/labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "test", size: "50x30", templateVersion: "v1" }),
+    })
+
+    if (!response.ok) {
+      toast.error("چاپ لیبل تست ناموفق بود")
+      return
+    }
+
+    const data = (await response.json()) as { html: string }
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=960,height=700")
+    if (!printWindow) {
+      toast.error("پنجره چاپ توسط مرورگر مسدود شد")
+      return
+    }
+
+    printWindow.document.write(data.html)
+    printWindow.document.close()
+    printWindow.focus()
+    printWindow.print()
+  }
+
   const rotateToken = () => {
     if (!settings) {
       return
@@ -393,6 +419,14 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <p className="text-sm font-medium">یادداشت داخلی</p>
                 <Textarea value={settings.general.companyNote} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, companyNote: event.target.value } })} onBlur={() => void saveSettings(settings)} rows={4} />
+              </div>
+
+              <div className="rounded-lg border p-3 flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">چاپ تست لیبل</p>
+                  <p className="text-xs text-muted-foreground">برای بررسی سریع چاپگر حرارتی و قالب نسخه v1</p>
+                </div>
+                <Button type="button" variant="outline" onClick={() => void printTestLabel()}>Print test label</Button>
               </div>
             </CardContent>
           </Card>

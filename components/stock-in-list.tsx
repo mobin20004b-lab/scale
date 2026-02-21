@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +8,7 @@ import { History, Plus, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DateTimeText } from "@/components/date-time-text";
 import { EmptyStatePanel } from "@/components/ui/async-state";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface StockIn {
   id: string;
@@ -14,6 +16,7 @@ interface StockIn {
   supplier: string | null;
   invoiceNumber: string | null;
   createdAt: Date;
+  lotBatch?: string | null;
   product: {
     name: string;
     unit: string;
@@ -32,12 +35,49 @@ interface StockInListProps {
 }
 
 export function StockInList({ stockIns, highlightId }: StockInListProps) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const toggle = (id: string, checked: boolean) => {
+    setSelectedIds((prev) =>
+      checked ? [...new Set([...prev, id])] : prev.filter((item) => item !== id)
+    );
+  };
+
+  const printLabels = async (ids: string[]) => {
+    const response = await fetch("/api/labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "stock-in", stockInIds: ids, size: "50x30" }),
+    });
+
+    if (!response.ok) return;
+    const data = (await response.json()) as { html: string };
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=960,height=700");
+    if (!printWindow) return;
+
+    printWindow.document.write(data.html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <History className="size-5" />
-          ورودی‌های اخیر
+        <CardTitle className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <History className="size-5" />
+            ورودی‌های اخیر
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={selectedIds.length === 0}
+            onClick={() => printLabels(selectedIds)}
+          >
+            <Printer className="size-3.5 ml-1" /> چاپ گروهی ({selectedIds.length})
+          </Button>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -96,7 +136,14 @@ export function StockInList({ stockIns, highlightId }: StockInListProps) {
                   )}
 
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-                    <Button type="button" variant="ghost" size="sm" onClick={() => window.print()}><Printer className="size-3.5 ml-1" />چاپ مجدد لیبل</Button>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={`print-${stockIn.id}`}
+                        checked={selectedIds.includes(stockIn.id)}
+                        onCheckedChange={(checked) => toggle(stockIn.id, Boolean(checked))}
+                      />
+                      <Button type="button" variant="ghost" size="sm" onClick={() => printLabels([stockIn.id])}><Printer className="size-3.5 ml-1" />Print tag</Button>
+                    </div>
                     <span>{stockIn.user.full_name}</span>
                     <span>
                       <DateTimeText value={stockIn.createdAt} showTimeZone />
