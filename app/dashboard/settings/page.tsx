@@ -14,6 +14,8 @@ import { Check, Code, Copy, Database, Key, Lock, Settings, Shield, UserCog, User
 import { DEFAULT_LOCALE, getDictionary } from "@/lib/i18n"
 
 type UserRole = "ADMIN" | "USER" | "VIEWER"
+type SettingsTab = "users" | "api" | "security" | "general" | "docs"
+type EditableSettingsTab = "api" | "security" | "general"
 
 type UserItem = {
   id: string
@@ -42,6 +44,8 @@ type SystemSettings = {
   }
 }
 
+const editableTabs: EditableSettingsTab[] = ["api", "security", "general"]
+
 const apiEndpoints = [
   { method: "GET", path: "/api/external/products", description: "دریافت لیست تمام محصولات با موجودی فعلی" },
   { method: "GET", path: "/api/external/product/:id", description: "دریافت اطلاعات کامل یک محصول خاص" },
@@ -50,13 +54,17 @@ const apiEndpoints = [
   { method: "GET", path: "/api/external/inventory", description: "گزارش کامل موجودی انبار" }
 ]
 
+const sectionEqual = <K extends EditableSettingsTab>(a: SystemSettings, b: SystemSettings, section: K) => JSON.stringify(a[section]) === JSON.stringify(b[section])
+
 export default function SettingsPage() {
   const t = getDictionary(DEFAULT_LOCALE)
 
   const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
+  const [isSavingTab, setIsSavingTab] = useState<EditableSettingsTab | null>(null)
   const [users, setUsers] = useState<UserItem[]>([])
   const [settings, setSettings] = useState<SystemSettings | null>(null)
+  const [baselineSettings, setBaselineSettings] = useState<SystemSettings | null>(null)
+  const [activeTab, setActiveTab] = useState<SettingsTab>("users")
 
   const [newUserName, setNewUserName] = useState("")
   const [newUserEmail, setNewUserEmail] = useState("")
@@ -65,6 +73,20 @@ export default function SettingsPage() {
   const [lastCopied, setLastCopied] = useState<string | null>(null)
 
   const activeUsers = useMemo(() => users.filter((user) => user.active).length, [users])
+
+  const dirtyTabs = useMemo(() => {
+    if (!settings || !baselineSettings) {
+      return { api: false, security: false, general: false }
+    }
+
+    return {
+      api: !sectionEqual(settings, baselineSettings, "api"),
+      security: !sectionEqual(settings, baselineSettings, "security"),
+      general: !sectionEqual(settings, baselineSettings, "general")
+    }
+  }, [baselineSettings, settings])
+
+  const hasUnsavedChanges = dirtyTabs.api || dirtyTabs.security || dirtyTabs.general
 
   const loadData = async () => {
     try {
@@ -76,6 +98,7 @@ export default function SettingsPage() {
       const data = (await response.json()) as { users: UserItem[]; settings: SystemSettings }
       setUsers(data.users)
       setSettings(data.settings)
+      setBaselineSettings(data.settings)
     } catch {
       toast.error("دریافت تنظیمات با خطا مواجه شد")
     } finally {
@@ -87,26 +110,65 @@ export default function SettingsPage() {
     loadData()
   }, [])
 
-  const saveSettings = async (nextSettings: SystemSettings) => {
-    setSettings(nextSettings)
-    setIsSaving(true)
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) {
+        return
+      }
+
+      event.preventDefault()
+      event.returnValue = ""
+    }
+
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  }, [hasUnsavedChanges])
+
+  const saveSettingsForTab = async (tab: EditableSettingsTab) => {
+    if (!settings || !baselineSettings || !dirtyTabs[tab]) {
+      return
+    }
+
+    const candidateSettings = settings
+    setIsSavingTab(tab)
+
     try {
       const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings: nextSettings })
+        body: JSON.stringify({ settings: candidateSettings })
       })
 
       if (!response.ok) {
         throw new Error("save failed")
       }
 
-      toast.success("تنظیمات ذخیره شد")
+      const data = (await response.json()) as { settings: SystemSettings }
+      setSettings(data.settings)
+      setBaselineSettings(data.settings)
+      toast.success("تغییرات ذخیره شد")
     } catch {
+      try {
+        const latestResponse = await fetch("/api/settings", { cache: "no-store" })
+        if (latestResponse.ok) {
+          const latestData = (await latestResponse.json()) as { settings: SystemSettings }
+          const hasConflict = !sectionEqual(latestData.settings, baselineSettings, tab)
+          setBaselineSettings(latestData.settings)
+
+          if (hasConflict) {
+            toast.error("تنظیمات این بخش توسط کاربر دیگری تغییر کرده است. لطفاً بازبینی و مجدد ذخیره کنید")
+          } else {
+            toast.error("ذخیره تنظیمات ناموفق بود")
+          }
+          return
+        }
+      } catch {
+        // best-effort conflict detection
+      }
+
       toast.error("ذخیره تنظیمات ناموفق بود")
-      await loadData()
     } finally {
-      setIsSaving(false)
+      setIsSavingTab(null)
     }
   }
 
@@ -168,7 +230,6 @@ export default function SettingsPage() {
     setTimeout(() => setLastCopied((current) => (current === key ? null : current)), 1800)
   }
 
-
   const printTestLabel = async () => {
     const response = await fetch("/api/labels", {
       method: "POST",
@@ -199,16 +260,37 @@ export default function SettingsPage() {
       return
     }
 
-    const next = {
+    setSettings({
       ...settings,
       api: {
         ...settings.api,
         token: `sk_live_${crypto.randomUUID().replaceAll("-", "")}`
       }
+    })
+  }
+
+  const handleTabChange = (nextTab: string) => {
+    if (nextTab === activeTab) {
+      return
     }
 
-    void saveSettings(next)
+    if (hasUnsavedChanges && !window.confirm("تغییرات ذخیره‌نشده دارید. آیا می‌خواهید بدون ذخیره‌سازی جابه‌جا شوید؟")) {
+      return
+    }
+
+    setActiveTab(nextTab as SettingsTab)
   }
+
+  const saveActions = (tab: EditableSettingsTab) => (
+    <div className="flex items-center justify-between rounded-lg border border-dashed px-3 py-2">
+      <p className="text-xs text-muted-foreground">
+        {dirtyTabs[tab] ? "تغییرات ذخیره‌نشده دارید" : "تمام تغییرات این بخش ذخیره شده است"}
+      </p>
+      <Button type="button" size="sm" onClick={() => void saveSettingsForTab(tab)} disabled={!dirtyTabs[tab] || isSavingTab !== null}>
+        {isSavingTab === tab ? "در حال ذخیره..." : "ذخیره تغییرات"}
+      </Button>
+    </div>
+  )
 
   if (isLoading || !settings) {
     return <div className="text-sm text-muted-foreground">در حال دریافت تنظیمات...</div>
@@ -264,12 +346,12 @@ export default function SettingsPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="users" className="gap-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="gap-4">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="users">مدیریت کاربران</TabsTrigger>
-          <TabsTrigger value="api">مدیریت API</TabsTrigger>
-          <TabsTrigger value="security">امنیت و رمز</TabsTrigger>
-          <TabsTrigger value="general">تنظیمات عمومی</TabsTrigger>
+          <TabsTrigger value="api" className="gap-2">مدیریت API {dirtyTabs.api ? <span className="size-2 rounded-full bg-amber-500" /> : null}</TabsTrigger>
+          <TabsTrigger value="security" className="gap-2">امنیت و رمز {dirtyTabs.security ? <span className="size-2 rounded-full bg-amber-500" /> : null}</TabsTrigger>
+          <TabsTrigger value="general" className="gap-2">تنظیمات عمومی {dirtyTabs.general ? <span className="size-2 rounded-full bg-amber-500" /> : null}</TabsTrigger>
           <TabsTrigger value="docs">مستندات</TabsTrigger>
         </TabsList>
 
@@ -340,23 +422,25 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">فعال‌سازی API خارجی</p>
                   <div className="flex items-center gap-3">
-                    <Switch checked={settings.api.enabled} onCheckedChange={(value) => void saveSettings({ ...settings, api: { ...settings.api, enabled: value } })} />
+                    <Switch checked={settings.api.enabled} onCheckedChange={(value) => setSettings({ ...settings, api: { ...settings.api, enabled: value } })} />
                     <span className="text-sm text-muted-foreground">{settings.api.enabled ? "فعال" : "غیرفعال"}</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm font-medium">محدودیت درخواست در دقیقه</p>
-                  <Input dir="ltr" value={String(settings.api.rateLimitPerMinute)} onChange={(event) => setSettings({ ...settings, api: { ...settings.api, rateLimitPerMinute: Number(event.target.value || 0) } })} onBlur={() => void saveSettings(settings)} />
+                  <Input dir="ltr" value={String(settings.api.rateLimitPerMinute)} onChange={(event) => setSettings({ ...settings, api: { ...settings.api, rateLimitPerMinute: Number(event.target.value || 0) } })} />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <p className="text-sm font-medium">توکن API</p>
                 <div className="flex gap-2">
-                  <Input dir="ltr" value={settings.api.token} onChange={(event) => setSettings({ ...settings, api: { ...settings.api, token: event.target.value } })} onBlur={() => void saveSettings(settings)} />
+                  <Input dir="ltr" value={settings.api.token} onChange={(event) => setSettings({ ...settings, api: { ...settings.api, token: event.target.value } })} />
                   <Button variant="outline" onClick={rotateToken}>چرخش توکن</Button>
                 </div>
               </div>
+
+              {saveActions("api")}
             </CardContent>
           </Card>
         </TabsContent>
@@ -370,23 +454,25 @@ export default function SettingsPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <span className="text-sm">الزام رمز قوی</span>
-                  <Switch checked={settings.security.requireStrongPassword} onCheckedChange={(value) => void saveSettings({ ...settings, security: { ...settings.security, requireStrongPassword: value } })} />
+                  <Switch checked={settings.security.requireStrongPassword} onCheckedChange={(value) => setSettings({ ...settings, security: { ...settings.security, requireStrongPassword: value } })} />
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <span className="text-sm">الزام تغییر دوره‌ای رمز عبور</span>
-                  <Switch checked={settings.security.forceRotation} onCheckedChange={(value) => void saveSettings({ ...settings, security: { ...settings.security, forceRotation: value } })} />
+                  <Switch checked={settings.security.forceRotation} onCheckedChange={(value) => setSettings({ ...settings, security: { ...settings.security, forceRotation: value } })} />
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <p className="text-sm font-medium">دوره تغییر رمز (روز)</p>
-                  <Input dir="ltr" value={String(settings.security.rotationDays)} onChange={(event) => setSettings({ ...settings, security: { ...settings.security, rotationDays: Number(event.target.value || 0) } })} onBlur={() => void saveSettings(settings)} />
+                  <Input dir="ltr" value={String(settings.security.rotationDays)} onChange={(event) => setSettings({ ...settings, security: { ...settings.security, rotationDays: Number(event.target.value || 0) } })} />
                 </div>
                 <div className="flex items-end">
                   <Button variant="outline" className="w-full" disabled>خروج همه نشست‌های فعال</Button>
                 </div>
               </div>
+
+              {saveActions("security")}
             </CardContent>
           </Card>
         </TabsContent>
@@ -400,7 +486,7 @@ export default function SettingsPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <p className="text-sm font-medium">زبان سیستم</p>
-                  <Select value={settings.general.systemLanguage} onValueChange={(value) => void saveSettings({ ...settings, general: { ...settings.general, systemLanguage: value } })}>
+                  <Select value={settings.general.systemLanguage} onValueChange={(value) => setSettings({ ...settings, general: { ...settings.general, systemLanguage: value } })}>
                     <SelectTrigger><SelectValue placeholder="زبان" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="fa">فارسی</SelectItem>
@@ -410,18 +496,18 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm font-medium">منطقه زمانی</p>
-                  <Input dir="ltr" value={settings.general.timezone} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, timezone: event.target.value } })} onBlur={() => void saveSettings(settings)} />
+                  <Input dir="ltr" value={settings.general.timezone} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, timezone: event.target.value } })} />
                 </div>
               </div>
 
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <span className="text-sm">فعال‌سازی اعلان‌ها</span>
-                <Switch checked={settings.general.notificationsEnabled} onCheckedChange={(value) => void saveSettings({ ...settings, general: { ...settings.general, notificationsEnabled: value } })} />
+                <Switch checked={settings.general.notificationsEnabled} onCheckedChange={(value) => setSettings({ ...settings, general: { ...settings.general, notificationsEnabled: value } })} />
               </div>
 
               <div className="space-y-2">
                 <p className="text-sm font-medium">یادداشت داخلی</p>
-                <Textarea value={settings.general.companyNote} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, companyNote: event.target.value } })} onBlur={() => void saveSettings(settings)} rows={4} />
+                <Textarea value={settings.general.companyNote} onChange={(event) => setSettings({ ...settings, general: { ...settings.general, companyNote: event.target.value } })} rows={4} />
               </div>
 
               <div className="rounded-lg border p-3 flex items-center justify-between gap-2">
@@ -431,6 +517,8 @@ export default function SettingsPage() {
                 </div>
                 <Button type="button" variant="outline" onClick={() => void printTestLabel()}>{t.common.printTestLabel}</Button>
               </div>
+
+              {saveActions("general")}
             </CardContent>
           </Card>
         </TabsContent>
@@ -439,7 +527,7 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Code className="size-5" /> مستندات API</CardTitle>
-              <CardDescription>وضعیت ذخیره: {isSaving ? "در حال ذخیره..." : "ذخیره شده"}</CardDescription>
+              <CardDescription>وضعیت ذخیره: {hasUnsavedChanges ? "تغییرات ذخیره‌نشده" : "ذخیره شده"}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="p-4 rounded-lg bg-muted flex items-center justify-between gap-3">
