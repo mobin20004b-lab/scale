@@ -30,8 +30,10 @@ import {
   AlertCircle,
   Check,
   Copy,
+  EllipsisVertical,
   Edit,
   KeyRound,
+  Lock,
   Plus,
   RefreshCw,
   Trash2,
@@ -45,8 +47,20 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DateTimeText } from "@/components/date-time-text";
 import { getScaleHealthSnapshot } from "@/lib/scale-health";
 import { formatScaleWeight } from "@/lib/scale-reading";
@@ -83,6 +97,7 @@ interface Scale {
   printerType?: "TSPL" | "ESC_POS" | null;
   printerConnection?: Record<string, unknown> | null;
   config?: Record<string, unknown> | null;
+  minFirmwareVersion?: string | null;
   lastWeight: number | null;
   lastWeightAt: string | Date | null;
   archivedAt?: string | Date | null;
@@ -116,6 +131,8 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [healthFilter, setHealthFilter] = useState("all");
+  const [quickHealthFilter, setQuickHealthFilter] = useState<"all" | "offline" | "firmware-mismatch" | "stale">("all");
+  const [staleThresholdMin, setStaleThresholdMin] = useState("10");
   const [reauthPassword, setReauthPassword] = useState("");
   const [reauthInProgress, setReauthInProgress] = useState(false);
   const [reauthVerifiedAt, setReauthVerifiedAt] = useState<number | null>(null);
@@ -128,6 +145,9 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const [commandTimeline, setCommandTimeline] = useState<Record<string, any[]>>({});
   const [commandBusy, setCommandBusy] = useState<Record<string, boolean>>({});
   const [configBusy, setConfigBusy] = useState<Record<string, boolean>>({});
+  const [retirementTarget, setRetirementTarget] = useState<Scale | null>(null);
+  const [hardDeleteTarget, setHardDeleteTarget] = useState<Scale | null>(null);
+  const [hardDeletePhrase, setHardDeletePhrase] = useState("");
 
   useEffect(() => {
     setLocalScales(scales);
@@ -141,10 +161,12 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
 
 
   const visibleScales = useMemo(() => {
+    const staleThresholdMs = Math.max(1, Number(staleThresholdMin) || 10) * 60 * 1000;
     return localScales.filter((scale) => {
-      const health = getScaleHealthSnapshot(scale.lastWeightAt, {
+      const snapshot = getScaleHealthSnapshot(scale.lastWeightAt, {
         heartbeatIntervalSec: scale.heartbeatIntervalSec,
-      }).health;
+      });
+      const health = snapshot.health;
       const matchesSearch = scale.name
         .toLowerCase()
         .includes(search.trim().toLowerCase());
@@ -154,9 +176,25 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
         statusFilter === "all" ||
         (statusFilter === "active" ? scale.isActive : !scale.isActive);
       const matchesHealth = healthFilter === "all" || health === healthFilter;
+      const hasFirmwareMismatch =
+        Boolean(scale.minFirmwareVersion) &&
+        Boolean(scale.firmwareVersion) &&
+        scale.minFirmwareVersion !== scale.firmwareVersion;
+      const staleByThreshold =
+        snapshot.lastReadingAgeMs !== null &&
+        snapshot.lastReadingAgeMs > staleThresholdMs;
+      const matchesQuickFilter =
+        quickHealthFilter === "all" ||
+        (quickHealthFilter === "offline" && health === "OFFLINE") ||
+        (quickHealthFilter === "firmware-mismatch" && hasFirmwareMismatch) ||
+        (quickHealthFilter === "stale" && staleByThreshold);
 
       return (
-        matchesSearch && matchesWarehouse && matchesStatus && matchesHealth
+        matchesSearch &&
+        matchesWarehouse &&
+        matchesStatus &&
+        matchesHealth &&
+        matchesQuickFilter
       );
     });
   }, [
@@ -165,7 +203,45 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     warehouseFilter,
     statusFilter,
     healthFilter,
+    quickHealthFilter,
+    staleThresholdMin,
   ]);
+
+  const formRules = useMemo(() => {
+    const errors: string[] = [];
+    const tareValue = Number(tare);
+    const precisionValue = Number(precision);
+    const heartbeatValue = Number(heartbeatIntervalSec);
+    const normalizedUnit = unit.trim().toLowerCase();
+
+    if (!name.trim()) errors.push("نام ترازو الزامی است.");
+    if (!warehouseId) errors.push("انتخاب انبار الزامی است.");
+    if (!unit.trim()) errors.push("واحد اندازه‌گیری الزامی است.");
+    if (!Number.isFinite(tareValue) || tareValue < 0) {
+      errors.push("تار باید عددی بزرگ‌تر یا مساوی صفر باشد.");
+    }
+    if (!Number.isInteger(precisionValue) || precisionValue < 0 || precisionValue > 4) {
+      errors.push("دقت نمایش باید عدد صحیح بین ۰ تا ۴ باشد.");
+    }
+    if (["کیلوگرم", "kg"].includes(normalizedUnit) && precisionValue > 3) {
+      errors.push("برای واحد کیلوگرم، دقت بیش از ۳ اعشار پشتیبانی نمی‌شود.");
+    }
+    if (["گرم", "g"].includes(normalizedUnit) && tareValue > 10000) {
+      errors.push("در واحد گرم، تار بیش از ۱۰٬۰۰۰ احتمالاً اشتباه پیکربندی است.");
+    }
+    if (!Number.isInteger(heartbeatValue) || heartbeatValue < 1 || heartbeatValue > 120) {
+      errors.push("فاصله ضربان باید بین ۱ تا ۱۲۰ ثانیه باشد.");
+    }
+
+    return {
+      errors,
+      canSubmit: errors.length === 0,
+      thresholdHint:
+        Number.isFinite(heartbeatValue) && heartbeatValue > 0
+          ? `با این مقدار، دستگاه معمولاً پس از حدود ${heartbeatValue * 3} ثانیه در صورت عدم ارسال داده، وارد وضعیت مردد/آفلاین می‌شود.`
+          : "",
+    };
+  }, [name, warehouseId, unit, tare, precision, heartbeatIntervalSec]);
 
   const visibleScaleIds = useMemo(
     () => visibleScales.map((scale) => scale.id),
@@ -331,6 +407,28 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     );
 
     toast.success("حذف ترازو در سرور زمان‌بندی شد.");
+    router.refresh();
+  };
+
+  const archiveScale = async (scale: Scale) => {
+    const response = await fetch(`/api/scales/${scale.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        archivedAt: new Date().toISOString(),
+        retiredAt: new Date().toISOString(),
+        isActive: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      toast.error(payload.error || "آرشیو ترازو ناموفق بود");
+      return;
+    }
+
+    toast.success("ترازو آرشیو شد و کلید API بلافاصله غیرفعال شد.");
+    setRetirementTarget(null);
     router.refresh();
   };
 
@@ -612,8 +710,18 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)}>انصراف</Button>
-                <Button onClick={submitScale}>ذخیره</Button>
+                <Button onClick={submitScale} disabled={!formRules.canSubmit}>ذخیره</Button>
               </DialogFooter>
+              {formRules.thresholdHint && (
+                <p className="text-xs text-muted-foreground">{formRules.thresholdHint}</p>
+              )}
+              {formRules.errors.length > 0 && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive space-y-1">
+                  {formRules.errors.map((error) => (
+                    <div key={error}>{error}</div>
+                  ))}
+                </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>
@@ -657,6 +765,21 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
               <SelectItem value="ONLINE">آنلاین</SelectItem>
               <SelectItem value="STALE">مردد</SelectItem>
               <SelectItem value="OFFLINE">آفلاین</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant={quickHealthFilter === "offline" ? "default" : "outline"} onClick={() => setQuickHealthFilter((prev) => (prev === "offline" ? "all" : "offline"))}>فقط آفلاین</Button>
+          <Button size="sm" variant={quickHealthFilter === "firmware-mismatch" ? "default" : "outline"} onClick={() => setQuickHealthFilter((prev) => (prev === "firmware-mismatch" ? "all" : "firmware-mismatch"))}>عدم تطابق فریمور</Button>
+          <Button size="sm" variant={quickHealthFilter === "stale" ? "default" : "outline"} onClick={() => setQuickHealthFilter((prev) => (prev === "stale" ? "all" : "stale"))}>بیش از X دقیقه بی‌داده</Button>
+          <Select value={staleThresholdMin} onValueChange={setStaleThresholdMin}>
+            <SelectTrigger className="w-[130px] h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5">۵ دقیقه</SelectItem>
+              <SelectItem value="10">۱۰ دقیقه</SelectItem>
+              <SelectItem value="30">۳۰ دقیقه</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -799,66 +922,32 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                   >
                     <Edit className="size-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setCopyConfirmScale(scale)}
-                  >
-                    {copiedToken === scale.id ? (
-                      <Check className="size-4" />
-                    ) : (
-                      <Copy className="size-4" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setRotateConfirmScale(scale)}
-                  >
-                    <RefreshCw className="size-4" />
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-                        disabled={isPendingDelete(scale)}
-                      >
-                        <Trash2 className="size-4" />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" aria-label="عملیات حساس">
+                        <EllipsisVertical className="size-4" />
                       </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>حذف ترازو</AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-2">
-                          <span className="block">
-                            آیا از حذف «{scale.name}» مطمئن هستید؟
-                          </span>
-                          <span className="block">
-                            انبار: <strong>{scale.warehouse.name}</strong>
-                          </span>
-                          {(scale._count?.stockIns ?? 0) > 0 && (
-                            <span className="block text-amber-600 dark:text-amber-400">
-                              هشدار: این ترازو {scale._count?.stockIns ?? 0}{" "}
-                              تراکنش ورود وزن‌شده دارد و به‌صورت آرشیو غیرفعال
-                              می‌شود.
-                            </span>
-                          )}
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>انصراف</AlertDialogCancel>
-                        <AlertDialogAction
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          onClick={() => deleteScale(scale)}
-                          disabled={isPendingDelete(scale)}
-                        >
-                          {isPendingDelete(scale) ? "حذف زمان‌بندی شده" : "حذف"}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel className="flex items-center gap-2">
+                        <Lock className="size-4" /> عملیات حساس
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => setCopyConfirmScale(scale)}>
+                        {copiedToken === scale.id ? <Check className="size-4 ml-2" /> : <Copy className="size-4 ml-2" />} کپی توکن
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setRotateConfirmScale(scale)}>
+                        <RefreshCw className="size-4 ml-2" /> چرخش توکن
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => setRetirementTarget(scale)}>
+                        آرشیو دستگاه (لغو دسترسی فوری)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive" disabled={isPendingDelete(scale)} onClick={() => setHardDeleteTarget(scale)}>
+                        <Trash2 className="size-4 ml-2" /> حذف کامل دستگاه
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   {isPendingDelete(scale) && (
                     <Button variant="secondary" size="sm" onClick={() => recoverScaleDelete(scale)}>
                       بازیابی حذف
@@ -887,24 +976,30 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                 </span>
               </div>
               <div className="grid gap-2 md:grid-cols-2 text-xs">
-                <div className="rounded-md border p-2 space-y-1">
-                  <div className="font-medium">Device & Firmware</div>
-                  <div>نوع دستگاه: {scale.deviceType || "ESP32"}</div>
-                  <div>نسخه فریمور: {scale.firmwareVersion || "-"}</div>
-                  <div>آخرین حضور: {scale.lastSeenAt ? <DateTimeText value={scale.lastSeenAt} showTimeZone /> : "-"}</div>
-                  <div>پرینتر: {scale.printerType || "-"}</div>
-                </div>
-                <div className="rounded-md border p-2 space-y-2">
-                  <div className="font-medium">Printer Control</div>
+                <Collapsible defaultOpen className="rounded-md border p-2 space-y-2">
+                  <CollapsibleTrigger className="font-medium text-right w-full">هویت و سلامت دستگاه</CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-1">
+                    <div>نوع دستگاه: {scale.deviceType || "ESP32"}</div>
+                    <div>نسخه فریمور: {scale.firmwareVersion || "-"}</div>
+                    <div>حداقل نسخه مجاز: {scale.minFirmwareVersion || "-"}</div>
+                    <div>آخرین حضور: {scale.lastSeenAt ? <DateTimeText value={scale.lastSeenAt} showTimeZone /> : "-"}</div>
+                  </CollapsibleContent>
+                </Collapsible>
+                <Collapsible defaultOpen className="rounded-md border p-2 space-y-2">
+                  <CollapsibleTrigger className="font-medium text-right w-full">پرینتر و کنترل سریع</CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-2">
+                    <div>پرینتر: {scale.printerType || "-"}</div>
                   <div className="flex flex-wrap gap-1">
                     <Button size="sm" variant="secondary" disabled={health === "OFFLINE" || commandBusy[scale.id]} onClick={() => enqueueCommand(scale.id, "PRINT_TEST")}>تست چاپ</Button>
                     <Button size="sm" variant="secondary" disabled={health === "OFFLINE" || commandBusy[scale.id]} onClick={() => enqueueCommand(scale.id, "PRINT_LABEL", { source: "latest-stock-in" })}>چاپ آخرین ورود</Button>
                     <Button size="sm" variant="secondary" disabled={health === "OFFLINE" || commandBusy[scale.id]} onClick={() => enqueueCommand(scale.id, "PRINT_LABEL", { source: "reprint-last" })}>چاپ مجدد</Button>
                     <Button size="sm" variant="outline" disabled={health === "OFFLINE" || configBusy[scale.id]} onClick={() => saveDeviceConfig(scale)}>ذخیره تنظیمات</Button>
                   </div>
-                </div>
-                <div className="rounded-md border p-2 space-y-1 md:col-span-2">
-                  <div className="font-medium">Command Timeline</div>
+                  </CollapsibleContent>
+                </Collapsible>
+                <Collapsible className="rounded-md border p-2 space-y-1 md:col-span-2">
+                  <CollapsibleTrigger className="font-medium text-right w-full">تاریخچه فرمان‌ها</CollapsibleTrigger>
+                  <CollapsibleContent>
                   <div className="space-y-1">
                     {(commandTimeline[scale.id] ?? []).slice(0, 3).map((item) => (
                       <div key={item.id} className="flex items-center justify-between text-[11px]">
@@ -916,7 +1011,8 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                       <div className="text-muted-foreground text-[11px]">فرمانی ثبت نشده است.</div>
                     )}
                   </div>
-                </div>
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
               <div className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground font-mono">
                 Device pull: GET /api/scales/:id/device/next-command (Bearer token)
@@ -1055,6 +1151,50 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={Boolean(retirementTarget)} onOpenChange={(openState) => !openState && setRetirementTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>آرشیو ترازو</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">آرشیو باعث غیرفعال شدن دستگاه و حفظ سوابق می‌شود.</span>
+              <span className="block">کلید API این ترازو بلافاصله revoke می‌شود و دستگاه دیگر احراز هویت نخواهد شد.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>انصراف</AlertDialogCancel>
+            <AlertDialogAction onClick={() => retirementTarget && archiveScale(retirementTarget)}>آرشیو و لغو دسترسی</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(hardDeleteTarget)} onOpenChange={(openState) => {
+        if (!openState) {
+          setHardDeleteTarget(null);
+          setHardDeletePhrase("");
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف کامل (غیرقابل بازگشت)</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">این عملیات برای «{hardDeleteTarget?.name}» تمام داده‌های دستگاه را برای همیشه حذف می‌کند.</span>
+              <span className="block">برای تایید، عبارت <strong>DELETE {hardDeleteTarget?.id}</strong> را وارد کنید.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input value={hardDeletePhrase} onChange={(event) => setHardDeletePhrase(event.target.value)} placeholder={hardDeleteTarget ? `DELETE ${hardDeleteTarget.id}` : "DELETE ..."} />
+          <AlertDialogFooter>
+            <AlertDialogCancel>انصراف</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!hardDeleteTarget || hardDeletePhrase !== `DELETE ${hardDeleteTarget.id}`}
+              onClick={() => hardDeleteTarget && deleteScale(hardDeleteTarget)}
+            >
+              حذف کامل
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
