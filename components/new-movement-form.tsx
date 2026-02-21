@@ -17,12 +17,16 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { findProductByScannedBarcode } from "@/lib/product-barcode";
+import { stockInFormSchema, stockOutFormSchema } from "@/lib/schemas/inventory";
+import { handleFormKeyboardNavigation } from "@/components/forms/form-utils";
 import {
   CheckCircle2,
   ScanLine,
   ArrowDownToLine,
   ArrowUpFromLine,
   Printer,
+  AlertTriangle,
+  ShieldAlert,
 } from "lucide-react";
 
 type MovementMode = "stock-in" | "stock-out";
@@ -46,6 +50,8 @@ interface MovementFormProps {
   inventoryByWarehouse: Record<string, number>;
 }
 
+const DUPLICATE_SCAN_DEBOUNCE_MS = 1200;
+
 export function NewMovementForm({
   products,
   warehouses,
@@ -53,6 +59,10 @@ export function NewMovementForm({
 }: MovementFormProps) {
   const router = useRouter();
   const scannerRef = useRef<HTMLInputElement>(null);
+  const lastScanRef = useRef<{ code: string; timestamp: number } | null>(null);
+  const lastUnknownScanRef = useRef<{ code: string; timestamp: number } | null>(
+    null
+  );
   const [mode, setMode] = useState<MovementMode>("stock-in");
   const [productId, setProductId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
@@ -62,6 +72,9 @@ export function NewMovementForm({
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scannerInput, setScannerInput] = useState("");
+  const [scannerStatus, setScannerStatus] = useState<
+    "idle" | "success" | "unknown" | "duplicate" | "error"
+  >("idle");
   const [receipt, setReceipt] = useState<{
     id: string;
     mode: MovementMode;
@@ -79,10 +92,27 @@ export function NewMovementForm({
 
   const qty = Number(quantity);
   const normalizedQty = Number.isFinite(qty) ? qty : 0;
+
+  const validationResult = useMemo(() => {
+    const baseValues = {
+      productId,
+      quantity,
+      notes,
+      invoiceNumber: "",
+      warehouseId,
+      customer,
+      supplier,
+    };
+
+    if (mode === "stock-in") {
+      return stockInFormSchema.safeParse(baseValues);
+    }
+
+    return stockOutFormSchema.safeParse(baseValues);
+  }, [customer, mode, notes, productId, quantity, supplier, warehouseId]);
+
   const warehouseKey =
-    selectedProduct && warehouseId
-      ? `${selectedProduct.id}:${warehouseId}`
-      : "";
+    selectedProduct && warehouseId ? `${selectedProduct.id}:${warehouseId}` : "";
   const availableInWarehouse = warehouseKey
     ? (inventoryByWarehouse[warehouseKey] ?? 0)
     : 0;
@@ -96,6 +126,7 @@ export function NewMovementForm({
 
   const canSubmit =
     !isSubmitting &&
+    validationResult.success &&
     !!selectedProduct &&
     !!warehouseId &&
     normalizedQty > 0 &&
@@ -115,18 +146,47 @@ export function NewMovementForm({
     const barcode = scannerInput.trim();
     if (!barcode) return;
 
-    const parsed = findProductByScannedBarcode(products as any, barcode);
+    const normalizedBarcode = barcode.toLowerCase();
+    const now = Date.now();
+
+    if (
+      lastScanRef.current &&
+      lastScanRef.current.code === normalizedBarcode &&
+      now - lastScanRef.current.timestamp < DUPLICATE_SCAN_DEBOUNCE_MS
+    ) {
+      setScannerStatus("duplicate");
+      toast.warning("اسکن تکراری نادیده گرفته شد.");
+      return;
+    }
+
+    lastScanRef.current = { code: normalizedBarcode, timestamp: now };
+
+    const parsed = findProductByScannedBarcode(products as Product[], barcode);
     if (!parsed) {
+      if (
+        lastUnknownScanRef.current &&
+        lastUnknownScanRef.current.code === normalizedBarcode &&
+        now - lastUnknownScanRef.current.timestamp < DUPLICATE_SCAN_DEBOUNCE_MS
+      ) {
+        setScannerStatus("duplicate");
+        toast.warning("بارکد ناشناس تکراری ثبت نشد.");
+        return;
+      }
+
+      lastUnknownScanRef.current = { code: normalizedBarcode, timestamp: now };
+
       await fetch("/api/barcodes/unknown", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ barcode, source: mode }),
       }).catch(() => null);
+      setScannerStatus("unknown");
       toast.error("محصولی با این بارکد یافت نشد.");
       return;
     }
 
     setProductId(parsed.id);
+    setScannerStatus("success");
     toast.success(`محصول ${parsed.name} انتخاب شد.`);
   };
 
@@ -180,6 +240,7 @@ export function NewMovementForm({
       resetForNextItem();
       router.refresh();
     } catch {
+      setScannerStatus("error");
       toast.error("خطا در ثبت عملیات.");
     } finally {
       setIsSubmitting(false);
@@ -235,11 +296,18 @@ export function NewMovementForm({
             </div>
           </div>
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form
+            className="space-y-5"
+            onSubmit={handleSubmit}
+            onKeyDown={(event) =>
+              handleFormKeyboardNavigation(event, "#movement-scanner-input")
+            }
+          >
             <div className="space-y-2 rounded-lg border p-3">
               <p className="text-sm font-medium">مرحله ۱: اسکن/انتخاب محصول</p>
               <div className="flex gap-2">
                 <Input
+                  id="movement-scanner-input"
                   ref={scannerRef}
                   value={scannerInput}
                   onChange={(e) => setScannerInput(e.target.value)}
@@ -247,11 +315,11 @@ export function NewMovementForm({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      onScan();
+                      void onScan();
                     }
                   }}
                 />
-                <Button type="button" variant="secondary" onClick={onScan}>
+                <Button type="button" variant="secondary" onClick={() => void onScan()}>
                   <ScanLine className="size-4" />
                 </Button>
               </div>
@@ -285,11 +353,17 @@ export function NewMovementForm({
               </Select>
 
               {mode === "stock-out" && selectedProduct && warehouseId && (
-                <p className="text-xs text-muted-foreground">
-                  موجودی قابل برداشت در این انبار:{" "}
-                  <strong>{availableInWarehouse.toFixed(2)}</strong>{" "}
-                  {selectedProduct.unit}
-                </p>
+                <div className="space-y-1 rounded-md border border-amber-300/70 bg-amber-50 p-2 text-xs text-amber-900">
+                  <p className="font-medium">
+                    موجودی قابل برداشت در این انبار: {availableInWarehouse.toFixed(2)} {selectedProduct.unit}
+                  </p>
+                  {normalizedQty > availableInWarehouse && (
+                    <p className="flex items-center gap-1 text-destructive">
+                      <ShieldAlert className="size-3.5" />
+                      مقدار خروج بیشتر از موجودی انبار است.
+                    </p>
+                  )}
+                </div>
               )}
 
               <Input
@@ -322,7 +396,7 @@ export function NewMovementForm({
             <div className="space-y-2 rounded-lg border p-3">
               <p className="text-sm font-medium">مرحله ۳: تایید</p>
               <div className="text-sm text-muted-foreground">
-                پیش‌نمایش تغییر موجودی: {before.toFixed(2)} →{" "}
+                پیشنمایش تغییر موجودی: {before.toFixed(2)} →{" "}
                 <span className={cn(after < 0 && "text-destructive")}>
                   {after.toFixed(2)}
                 </span>
@@ -332,12 +406,29 @@ export function NewMovementForm({
                   مقدار خروج از موجودی انبار بیشتر است.
                 </p>
               )}
+              {!validationResult.success && (
+                <p className="flex items-center gap-1 text-xs text-destructive">
+                  <AlertTriangle className="size-3.5" />
+                  {validationResult.error.issues[0]?.message}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                میانبرها: Alt+B برای فوکوس روی اسکنر، Ctrl+Enter برای ثبت سریع.
+              </p>
               <Button type="submit" disabled={!canSubmit} className="w-full">
                 <CheckCircle2 className="ml-2 size-4" /> ثبت و آماده آیتم بعدی
                 (Enter)
               </Button>
             </div>
           </form>
+
+          <p className="sr-only" aria-live="polite" id="scanner-status-live">
+            {scannerStatus === "success" && "بارکد با موفقیت خوانده شد."}
+            {scannerStatus === "unknown" && "بارکد ناشناس ثبت شد."}
+            {scannerStatus === "duplicate" && "اسکن تکراری نادیده گرفته شد."}
+            {scannerStatus === "error" && "خطا در خواندن بارکد."}
+            {scannerStatus === "idle" && "اسکنر آماده دریافت بارکد است."}
+          </p>
         </CardContent>
       </Card>
 
