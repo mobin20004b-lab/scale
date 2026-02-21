@@ -134,18 +134,21 @@ export function DashboardHeader({
         subtitle: "5 محصول در وضعیت بحرانی",
         href: "/dashboard/products?filter=low-stock",
         unread: true,
+        deepLinkLabel: "مشاهده محصولات",
       },
       {
         title: "فرمان‌های ناموفق ترازو",
         subtitle: "2 خطا نیازمند بررسی",
         href: "/dashboard/activity?status=FAILED",
         unread: true,
+        deepLinkLabel: "مشاهده Activity",
       },
       {
         title: "سفارش‌های خروج معطل",
         subtitle: "3 سفارش تایید نشده",
         href: "/dashboard/stock-out",
         unread: false,
+        deepLinkLabel: "بررسی سفارش‌ها",
       },
     ],
     [],
@@ -247,10 +250,14 @@ export function DashboardHeader({
               <DropdownMenuSeparator />
               {notifications.map((item) => (
                 <DropdownMenuItem key={item.title} asChild>
-                  <Link href={item.href} className="flex items-start justify-between gap-3">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-sm font-medium">{item.title}</span>
+                  <Link href={item.href} className="flex w-full items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <span className="text-sm font-medium flex items-center gap-2">
+                        {item.title}
+                        {item.unread && <span className="inline-block size-1.5 rounded-full bg-destructive" aria-hidden />}
+                      </span>
                       <span className="text-xs text-muted-foreground">{item.subtitle}</span>
+                      <span className="text-[11px] text-primary">{item.deepLinkLabel}</span>
                     </div>
                     {item.unread && <Badge className="mt-1" variant="destructive">جدید</Badge>}
                   </Link>

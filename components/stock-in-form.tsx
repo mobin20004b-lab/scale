@@ -1161,7 +1161,7 @@ export function StockInForm({
       </CardContent>
 
       <Dialog open={isPrintPreviewOpen} onOpenChange={setIsPrintPreviewOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl" initialFocusSelector="#print-preview-close">
           <DialogHeader>
             <DialogTitle>پیش‌نمایش چاپ لیبل</DialogTitle>
             <DialogDescription>
@@ -1181,7 +1181,7 @@ export function StockInForm({
             </p>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsPrintPreviewOpen(false)}>بستن</Button>
+            <Button id="print-preview-close" type="button" variant="outline" onClick={() => setIsPrintPreviewOpen(false)}>بستن</Button>
             <Button type="button" onClick={executePrint} disabled={isPreparingPrint}>
               <ExternalLink className="ml-1 size-4" />
               چاپ در پنجره جدید

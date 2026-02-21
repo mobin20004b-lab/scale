@@ -553,7 +553,7 @@ export function ProductsTable({
                               <Trash2 className="size-4" />
                             </Button>
                           </AlertDialogTrigger>
-                          <AlertDialogContent>
+                          <AlertDialogContent closeBehavior="destructive">
                             <AlertDialogHeader>
                               <AlertDialogTitle>حذف محصول</AlertDialogTitle>
                               <AlertDialogDescription className="space-y-2">

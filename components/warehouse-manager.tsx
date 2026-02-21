@@ -454,7 +454,7 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
                         <Trash2 className="size-4" />
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent>
+                    <AlertDialogContent closeBehavior="destructive">
                       <AlertDialogHeader>
                         <AlertDialogTitle>
                           {dependencies.hasDependencies

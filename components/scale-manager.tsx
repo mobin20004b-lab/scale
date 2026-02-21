@@ -1174,7 +1174,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           setHardDeletePhrase("");
         }
       }}>
-        <AlertDialogContent>
+        <AlertDialogContent closeBehavior="destructive">
           <AlertDialogHeader>
             <AlertDialogTitle>حذف کامل (غیرقابل بازگشت)</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
