@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "scale.command.acked.v1",
+  "type": "object",
+  "required": ["scaleId", "commandId", "status", "occurredAt"],
+  "properties": {
+    "scaleId": { "type": "string" },
+    "commandId": { "type": "string" },
+    "status": { "type": "string", "enum": ["acked", "failed"] },
+    "error": { "type": ["string", "null"] },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

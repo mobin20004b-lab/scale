@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "scale.telemetry.received.v1",
+  "type": "object",
+  "required": ["scaleId", "receivedAt"],
+  "properties": {
+    "scaleId": { "type": "string" },
+    "batteryLevel": { "type": ["number", "null"] },
+    "temperatureC": { "type": ["number", "null"] },
+    "signalRssi": { "type": ["number", "null"] },
+    "firmwareVersion": { "type": ["string", "null"] },
+    "receivedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

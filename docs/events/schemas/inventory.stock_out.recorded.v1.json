@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "inventory.stock_out.recorded.v1",
+  "type": "object",
+  "required": ["stockOutId", "productId", "warehouseId", "quantity", "weight", "occurredAt"],
+  "properties": {
+    "stockOutId": { "type": "string" },
+    "productId": { "type": "string" },
+    "warehouseId": { "type": "string" },
+    "quantity": { "type": "number" },
+    "weight": { "type": "number" },
+    "reason": { "type": ["string", "null"] },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

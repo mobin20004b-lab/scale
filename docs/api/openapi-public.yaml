@@ -1,0 +1,141 @@
+openapi: 3.1.0
+info:
+  title: Scale Public API
+  version: 0.1.0
+  description: Public integration API for products, inventory, and stock mutations.
+servers:
+  - url: https://api.example.com
+security:
+  - BearerAuth: []
+paths:
+  /api/external/products:
+    get:
+      summary: List products with inventory state
+      operationId: listProducts
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+  /api/external/product/{id}:
+    get:
+      summary: Get product by id
+      operationId: getProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Not found
+  /api/external/inventory:
+    get:
+      summary: Get aggregate inventory report
+      operationId: getInventory
+      responses:
+        '200':
+          description: Inventory report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InventoryItem'
+  /api/external/stock-in:
+    post:
+      summary: Record stock in
+      operationId: createStockIn
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockInRequest'
+      responses:
+        '201':
+          description: Created
+        '409':
+          description: Idempotency key conflict
+  /api/external/stock-out:
+    post:
+      summary: Record stock out
+      operationId: createStockOut
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockOutRequest'
+      responses:
+        '201':
+          description: Created
+        '409':
+          description: Idempotency key conflict
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Required for safe client retries on mutating operations.
+  schemas:
+    Product:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sku: { type: string }
+        barcode: { type: string, nullable: true }
+    InventoryItem:
+      type: object
+      properties:
+        productId: { type: string }
+        productName: { type: string }
+        quantity: { type: number }
+        totalWeight: { type: number }
+    StockInRequest:
+      type: object
+      required: [productId, quantity, weight]
+      properties:
+        productId: { type: string }
+        quantity: { type: number }
+        weight: { type: number }
+        notes: { type: string, nullable: true }
+    StockOutRequest:
+      type: object
+      required: [productId, quantity, weight]
+      properties:
+        productId: { type: string }
+        quantity: { type: number }
+        weight: { type: number }
+        reason: { type: string, nullable: true }
+        notes: { type: string, nullable: true }

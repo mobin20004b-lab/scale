@@ -1,0 +1,129 @@
+openapi: 3.1.0
+info:
+  title: Scale Device API
+  version: 0.1.0
+  description: Device-facing endpoints for scale state, telemetry, config, and commands.
+servers:
+  - url: https://api.example.com
+security:
+  - DeviceAuth: []
+paths:
+  /api/scales/{id}/weight:
+    post:
+      summary: Push latest measured weight
+      operationId: pushWeight
+      parameters:
+        - $ref: '#/components/parameters/ScaleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [weight]
+              properties:
+                weight: { type: number }
+                stable: { type: boolean }
+      responses:
+        '200': { description: Updated }
+        '401': { description: Unauthorized }
+  /api/scales/{id}/device/telemetry:
+    post:
+      summary: Push telemetry payload
+      operationId: pushTelemetry
+      parameters:
+        - $ref: '#/components/parameters/ScaleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryPayload'
+      responses:
+        '202': { description: Accepted }
+  /api/scales/{id}/device/config:
+    get:
+      summary: Pull effective config for scale
+      operationId: getDeviceConfig
+      parameters:
+        - $ref: '#/components/parameters/ScaleId'
+      responses:
+        '200':
+          description: Config document
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  config: { type: object, additionalProperties: true }
+                  version: { type: integer }
+                  updatedAt: { type: string, format: date-time }
+  /api/scales/{id}/device/next-command:
+    get:
+      summary: Poll next pending command
+      operationId: getNextCommand
+      parameters:
+        - $ref: '#/components/parameters/ScaleId'
+      responses:
+        '200':
+          description: Next command or none
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NextCommandResponse'
+  /api/scales/{id}/device/command-ack:
+    post:
+      summary: Acknowledge command execution result
+      operationId: ackCommand
+      parameters:
+        - $ref: '#/components/parameters/ScaleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [commandId, status]
+              properties:
+                commandId: { type: string }
+                status: { type: string, enum: [acked, failed] }
+                error: { type: string, nullable: true }
+      responses:
+        '200': { description: Acknowledged }
+components:
+  securitySchemes:
+    DeviceAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Device API Key
+  parameters:
+    ScaleId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    TelemetryPayload:
+      type: object
+      properties:
+        batteryLevel: { type: number }
+        temperatureC: { type: number }
+        signalRssi: { type: number }
+        firmwareVersion: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+    NextCommandResponse:
+      type: object
+      properties:
+        command:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string }
+            type: { type: string }
+            payload:
+              type: object
+              additionalProperties: true
+            createdAt: { type: string, format: date-time }

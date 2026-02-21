@@ -1,0 +1,28 @@
+# Documentation Index
+
+- Architecture
+  - `architecture/overview.md`
+  - `architecture/data-flow.md`
+  - `architecture/domain-map.md`
+- Runbooks
+  - `runbooks/incident-offline-scales.md`
+  - `runbooks/stock-conflict-resolution.md`
+  - `runbooks/failed-print-jobs.md`
+- Security
+  - `security/device-auth-and-key-rotation.md`
+  - `security/api-idempotency-and-replay-protection.md`
+- Operations
+  - `ops/monitoring-alerts-slos.md`
+- Firmware
+  - `firmware/provisioning-and-ota.md`
+- UX
+  - `ux/design-tokens-and-status-language.md`
+- ADRs
+  - `adr/README.md`
+  - `adr/0001-monolith-with-device-api.md`
+- API Contracts
+  - `api/openapi-public.yaml`
+  - `api/openapi-device.yaml`
+- Event Contracts
+  - `events/outbox-event-catalog.md`
+  - `events/schemas/*.json`
