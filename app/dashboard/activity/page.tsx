@@ -2,11 +2,14 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { History } from "lucide-react"
 import { DateTimeText } from "@/components/date-time-text"
 import { EmptyStatePanel } from "@/components/ui/async-state"
+import { ActivityFilters } from "@/components/activity-filters"
 import {
   activityQuerySchema,
+  formatDateOnlyInTimeZone,
   getTimeZoneLabel,
   resolveBusinessTimeZone,
   toBusinessDayEnd,
@@ -36,10 +39,15 @@ export default async function ActivityPage({
     user?: string
     from?: string
     to?: string
+    page?: string
   }>
 }) {
   const [params, settings] = await Promise.all([searchParams, readSystemSettings()])
   const businessTimeZone = resolveBusinessTimeZone(settings.general.timezone)
+  const pageSize = 50
+
+  const parsedPage = Number(params.page ?? "1")
+  const currentPage = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1
 
   const parsed = activityQuerySchema.safeParse(params)
   const validParams = parsed.success ? parsed.data : {}
@@ -58,10 +66,11 @@ export default async function ActivityPage({
     }
   }
 
-  const [activities, users] = await Promise.all([
+  const [activities, users, totalCount] = await Promise.all([
     prisma.activity.findMany({
       where,
-      take: 200,
+      skip: (currentPage - 1) * pageSize,
+      take: pageSize,
       orderBy: { createdAt: "desc" },
       include: { user: { select: { full_name: true } } },
     }),
@@ -69,10 +78,33 @@ export default async function ActivityPage({
       select: { id: true, full_name: true },
       orderBy: { full_name: "asc" },
     }),
+    prisma.activity.count({ where }),
   ])
 
   const entityValue = validParams.entity ?? "all"
   const userValue = validParams.user ?? "all"
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+
+  const now = new Date()
+  const today = formatDateOnlyInTimeZone(now, businessTimeZone)
+  const weekStart = formatDateOnlyInTimeZone(
+    new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000),
+    businessTimeZone,
+  )
+  const monthStart = `${today.slice(0, 8)}01`
+
+  const buildPageUrl = (page: number) => {
+    const query = new URLSearchParams()
+
+    if (entityValue !== "all") query.set("entity", entityValue)
+    if (userValue !== "all") query.set("user", userValue)
+    if (validParams.from) query.set("from", validParams.from)
+    if (validParams.to) query.set("to", validParams.to)
+    if (page > 1) query.set("page", String(page))
+
+    const queryString = query.toString()
+    return queryString ? `/dashboard/activity?${queryString}` : "/dashboard/activity"
+  }
 
   return (
     <div className="space-y-6">
@@ -92,56 +124,18 @@ export default async function ActivityPage({
           <div className="mb-3 text-xs text-muted-foreground">
             بازه‌های تاریخ بر اساس منطقه زمانی فعال: {getTimeZoneLabel(businessTimeZone)}
           </div>
-          <form className="grid gap-3 md:grid-cols-4">
-            <select
-              name="entity"
-              defaultValue={entityValue}
-              className="h-10 rounded-md border bg-background px-3 text-sm"
-            >
-              <option value="all">همه موجودیت‌ها</option>
-              <option value="Product">محصول</option>
-              <option value="StockIn">ورود</option>
-              <option value="StockOut">خروج</option>
-            </select>
-            <select
-              name="user"
-              defaultValue={userValue}
-              className="h-10 rounded-md border bg-background px-3 text-sm"
-            >
-              <option value="all">همه کاربران</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.full_name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              name="from"
-              defaultValue={validParams.from ?? ""}
-              className="h-10 rounded-md border bg-background px-3 text-sm"
-            />
-            <input
-              type="date"
-              name="to"
-              defaultValue={validParams.to ?? ""}
-              className="h-10 rounded-md border bg-background px-3 text-sm"
-            />
-            <div className="flex gap-2 md:col-span-4">
-              <button
-                type="submit"
-                className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
-              >
-                اعمال فیلتر
-              </button>
-              <Link
-                href="/dashboard/activity"
-                className="inline-flex items-center rounded-md border px-4 py-2 text-sm"
-              >
-                پاک کردن
-              </Link>
-            </div>
-          </form>
+          <ActivityFilters
+            users={users}
+            initialEntity={entityValue}
+            initialUser={userValue}
+            initialFrom={validParams.from ?? ""}
+            initialTo={validParams.to ?? ""}
+            quickRanges={{
+              today: { from: today, to: today },
+              week: { from: weekStart, to: today },
+              month: { from: monthStart, to: today },
+            }}
+          />
         </CardContent>
       </Card>
 
@@ -153,6 +147,9 @@ export default async function ActivityPage({
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 text-sm text-muted-foreground">
+            نمایش {(currentPage - 1) * pageSize + 1} تا {Math.min(currentPage * pageSize, totalCount)} از {totalCount} مورد
+          </div>
           <div className="space-y-4">
             {activities.length === 0 ? (
               <EmptyStatePanel
@@ -194,6 +191,33 @@ export default async function ActivityPage({
               ))
             )}
           </div>
+
+          {activities.length > 0 && (
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" asChild disabled={currentPage <= 1}>
+                  <Link href={buildPageUrl(Math.max(1, currentPage - 1))}>صفحه قبل</Link>
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  صفحه {currentPage} از {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  disabled={currentPage >= totalPages}
+                >
+                  <Link href={buildPageUrl(Math.min(totalPages, currentPage + 1))}>صفحه بعد</Link>
+                </Button>
+              </div>
+
+              {currentPage < totalPages && (
+                <Button asChild>
+                  <Link href={buildPageUrl(currentPage + 1)}>بارگذاری بیشتر</Link>
+                </Button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
