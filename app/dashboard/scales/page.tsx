@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getScaleHealthSnapshot } from "@/lib/scale-health";
 import { prisma } from "@/lib/prisma";
 import { finalizeDueDeletes } from "@/lib/deletion-lifecycle";
-import { getDictionary, getSessionLocale } from "@/lib/i18n";
+import { getDictionary } from "@/lib/i18n"
+import { getSessionLocale } from "@/lib/i18n-server";
 
 export default async function ScalesPage() {
   await finalizeDueDeletes("scale");

@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { DashboardShell } from "@/components/dashboard-shell"
-import { getSessionLocale } from "@/lib/i18n"
+import { getSessionLocale } from "@/lib/i18n-server"
 
 export default async function DashboardLayout({
   children,
