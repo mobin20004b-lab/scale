@@ -128,7 +128,7 @@ export async function DELETE(
     if ((scale._count.stockIns ?? 0) > 0) {
       await prisma.scale.update({
         where: { id },
-        data: { isActive: false, archivedAt: new Date() },
+        data: { isActive: false, archivedAt: new Date(), status: "ARCHIVED" },
       });
 
       return NextResponse.json({

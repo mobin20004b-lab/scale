@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { stockInFormSchema } from "@/lib/schemas/inventory";
 import { formatScaleWeight } from "@/lib/scale-reading";
+import { useScaleLiveChannel } from "@/hooks/use-scale-live-channel";
 import { EmptyStatePanel } from "@/components/ui/async-state";
 import {
   Empty,
@@ -74,9 +75,6 @@ export function StockInForm({
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [selectedScaleId, setSelectedScaleId] = useState<string>("");
   const [liveWeight, setLiveWeight] = useState<number | null>(null);
-  const [isFetchingWeight, setIsFetchingWeight] = useState(false);
-  const [weightError, setWeightError] = useState<string | null>(null);
-  const [weightRefreshKey, setWeightRefreshKey] = useState(0);
   const [scannerStatus, setScannerStatus] = useState<
     "idle" | "scanning" | "success" | "error"
   >("idle");
@@ -113,6 +111,23 @@ export function StockInForm({
     [scales, selectedScaleId]
   );
 
+  const {
+    scales: liveScaleMap,
+    isConnecting: isFetchingWeight,
+    error: weightError,
+    isStale,
+  } = useScaleLiveChannel(selectedScaleId ? [selectedScaleId] : []);
+
+  useEffect(() => {
+    if (!selectedScaleId) {
+      setLiveWeight(null);
+      return;
+    }
+
+    const liveScale = liveScaleMap[selectedScaleId];
+    setLiveWeight(liveScale?.lastWeight ?? null);
+  }, [liveScaleMap, selectedScaleId]);
+
   useEffect(() => {
     const presetProductId = searchParams.get("productId");
 
@@ -128,52 +143,6 @@ export function StockInForm({
     });
     setSelectedProduct(product);
   }, [products, searchParams, setValue]);
-
-  useEffect(() => {
-    if (!selectedScaleId) {
-      setLiveWeight(null);
-      setWeightError(null);
-      setIsFetchingWeight(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const fetchWeight = async ({ initialLoad = false } = {}) => {
-      if (initialLoad) {
-        setIsFetchingWeight(true);
-      }
-
-      try {
-        const response = await fetch(`/api/scales/${selectedScaleId}/weight`);
-        if (!response.ok) {
-          throw new Error();
-        }
-
-        const payload = await response.json();
-        if (!cancelled) {
-          setLiveWeight(payload.lastWeight ?? null);
-          setWeightError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setWeightError("ارتباط با ترازو برقرار نشد. دوباره تلاش کنید.");
-        }
-      } finally {
-        if (!cancelled && initialLoad) {
-          setIsFetchingWeight(false);
-        }
-      }
-    };
-
-    fetchWeight({ initialLoad: true });
-    const interval = setInterval(() => fetchWeight(), 1000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [selectedScaleId, weightRefreshKey]);
 
   const handleBarcodeScanned = (barcode: string) => {
     const product = products.find((p) => p.barcode === barcode);
@@ -321,6 +290,9 @@ export function StockInForm({
             <div className="space-y-3">
               {isFetchingWeight && <Skeleton className="h-14 w-full" />}
 
+              {isStale && !weightError && (
+                <EmptyDescription>داده زنده ترازو موقتاً قدیمی شده است.</EmptyDescription>
+              )}
               {weightError && (
                 <Empty className="gap-3 border border-destructive/40 bg-destructive/5 p-4">
                   <EmptyHeader className="max-w-full">
@@ -339,7 +311,7 @@ export function StockInForm({
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setWeightRefreshKey((prev) => prev + 1)}
+                      onClick={() => router.refresh()}
                     >
                       <RefreshCcw className="size-4 ml-2" />
                       تلاش مجدد

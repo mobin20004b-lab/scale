@@ -46,7 +46,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { DateTimeText } from "@/components/date-time-text";
-import { getScaleHealthSnapshot, ScaleHealth } from "@/lib/scale-health";
+import { getScaleHealthSnapshot } from "@/lib/scale-health";
+import { useScaleLiveChannel } from "@/hooks/use-scale-live-channel";
 import { formatScaleWeight } from "@/lib/scale-reading";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,6 +78,7 @@ interface Scale {
   heartbeatIntervalSec: number;
   lastWeight: number | null;
   lastWeightAt: string | Date | null;
+  lastHeartbeatAt?: string | Date | null;
   archivedAt?: string | Date | null;
   isActive: boolean;
   _count?: {
@@ -107,20 +109,6 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const [healthFilter, setHealthFilter] = useState("all");
   const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
-  const [liveWeights, setLiveWeights] = useState<
-    Record<
-      string,
-      {
-        lastWeight: number | null;
-        lastWeightAt: string | Date | null;
-        health: ScaleHealth;
-        lastReadingAgeMs: number | null;
-      }
-    >
-  >({});
-  const [isLoadingWeights, setIsLoadingWeights] = useState(false);
-  const [weightsError, setWeightsError] = useState<string | null>(null);
-  const [weightsRefreshKey, setWeightsRefreshKey] = useState(0);
   const [localScales, setLocalScales] = useState(scales);
   const [selectedScaleIds, setSelectedScaleIds] = useState<string[]>([]);
   const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
@@ -143,11 +131,23 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     };
   }, []);
 
+  const subscribedScaleIds = useMemo(
+    () => localScales.map((scale) => scale.id),
+    [localScales]
+  );
+
+  const {
+    scales: liveWeights,
+    isConnecting: isLoadingWeights,
+    error: weightsError,
+    isStale,
+  } = useScaleLiveChannel(subscribedScaleIds);
+
   const visibleScales = useMemo(() => {
     return localScales.filter((scale) => {
       const live = liveWeights[scale.id];
       const health =
-        live?.health ?? getScaleHealthSnapshot(scale.lastWeightAt).health;
+        live?.health ?? getScaleHealthSnapshot(scale.lastHeartbeatAt ?? scale.lastWeightAt, { archivedAt: scale.archivedAt }).health;
       const matchesSearch = scale.name
         .toLowerCase()
         .includes(search.trim().toLowerCase());
@@ -175,113 +175,6 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     () => visibleScales.map((scale) => scale.id),
     [visibleScales]
   );
-
-  useEffect(() => {
-    if (visibleScaleIds.length === 0) {
-      setLiveWeights({});
-      setWeightsError(null);
-      setIsLoadingWeights(false);
-      return;
-    }
-
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const getRefreshInterval = () =>
-      document.visibilityState === "visible" ? 1000 : 7000;
-
-    const fetchWeights = async ({ initialLoad = false } = {}) => {
-      if (initialLoad) {
-        setIsLoadingWeights(true);
-      }
-
-      let hasError = false;
-
-      try {
-        const params = new URLSearchParams({ ids: visibleScaleIds.join(",") });
-        const response = await fetch(`/api/scales/live?${params.toString()}`);
-        if (!response.ok) {
-          hasError = true;
-        } else {
-          const payload = (await response.json()) as {
-            scales: Array<{
-              id: string;
-              lastWeight: number | null;
-              lastWeightAt: string | null;
-              health: ScaleHealth;
-              lastReadingAgeMs: number | null;
-            }>;
-          };
-
-          if (!cancelled) {
-            const nextWeights: Record<
-              string,
-              {
-                lastWeight: number | null;
-                lastWeightAt: string | null;
-                health: ScaleHealth;
-                lastReadingAgeMs: number | null;
-              }
-            > = {};
-
-            payload.scales.forEach((scale) => {
-              nextWeights[scale.id] = {
-                lastWeight: scale.lastWeight,
-                lastWeightAt: scale.lastWeightAt,
-                health: scale.health,
-                lastReadingAgeMs: scale.lastReadingAgeMs,
-              };
-            });
-
-            setLiveWeights(nextWeights);
-          }
-        }
-      } catch {
-        hasError = true;
-      }
-
-      if (!cancelled) {
-        setWeightsError(
-          hasError
-            ? "بخشی از وزن‌های لحظه‌ای قابل دریافت نیست. اتصال شبکه یا وضعیت ترازوها را بررسی کنید."
-            : null
-        );
-        if (initialLoad) {
-          setIsLoadingWeights(false);
-        }
-      }
-    };
-
-    const scheduleNext = () => {
-      if (cancelled) {
-        return;
-      }
-
-      timer = setTimeout(async () => {
-        await fetchWeights();
-        scheduleNext();
-      }, getRefreshInterval());
-    };
-
-    const refreshNow = async () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-      await fetchWeights();
-      scheduleNext();
-    };
-
-    void fetchWeights({ initialLoad: true }).then(() => scheduleNext());
-    document.addEventListener("visibilitychange", refreshNow);
-
-    return () => {
-      cancelled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-      document.removeEventListener("visibilitychange", refreshNow);
-    };
-  }, [visibleScaleIds, weightsRefreshKey]);
 
   const submitScale = async () => {
     try {
@@ -587,7 +480,8 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
             <SelectContent>
               <SelectItem value="all">همه سلامت‌ها</SelectItem>
               <SelectItem value="ONLINE">آنلاین</SelectItem>
-              <SelectItem value="STALE">مردد</SelectItem>
+              <SelectItem value="DEGRADED">نابسامان</SelectItem>
+              <SelectItem value="ARCHIVED">آرشیو</SelectItem>
               <SelectItem value="OFFLINE">آفلاین</SelectItem>
             </SelectContent>
           </Select>
@@ -651,22 +545,26 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           const lastWeight = live?.lastWeight ?? scale.lastWeight;
           const lastWeightAt = live?.lastWeightAt ?? scale.lastWeightAt;
           const health =
-            live?.health ?? getScaleHealthSnapshot(scale.lastWeightAt).health;
+            live?.health ?? getScaleHealthSnapshot(scale.lastHeartbeatAt ?? scale.lastWeightAt, { archivedAt: scale.archivedAt }).health;
           const healthLabel =
             health === "ONLINE"
               ? "آنلاین"
-              : health === "STALE"
-                ? "مردد"
-                : "آفلاین";
+              : health === "DEGRADED"
+                ? "نابسامان"
+                : health === "ARCHIVED"
+                  ? "آرشیو"
+                  : "آفلاین";
           const healthVariant =
             health === "ONLINE"
               ? "default"
-              : health === "STALE"
+              : health === "DEGRADED"
                 ? "secondary"
-                : "destructive";
-          const fallbackAgeMs = getScaleHealthSnapshot(
-            scale.lastWeightAt
-          ).lastReadingAgeMs;
+                : health === "ARCHIVED"
+                  ? "outline"
+                  : "destructive";
+          const fallbackAgeMs = getScaleHealthSnapshot(scale.lastHeartbeatAt ?? scale.lastWeightAt, {
+            archivedAt: scale.archivedAt,
+          }).lastReadingAgeMs;
           const ageMs = live?.lastReadingAgeMs ?? fallbackAgeMs;
           const healthAgeLabel =
             ageMs === null
@@ -846,6 +744,23 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
           </div>
         )}
 
+        {isStale && !weightsError && (
+          <Empty className="border border-amber-500/40 bg-amber-500/5 p-4 md:p-5">
+            <EmptyHeader className="max-w-full">
+              <EmptyMedia
+                variant="icon"
+                className="bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              >
+                <AlertCircle className="size-5" />
+              </EmptyMedia>
+              <EmptyTitle className="text-base">داده زنده ترازو به‌روز نیست</EmptyTitle>
+              <EmptyDescription>
+                بیش از چند ثانیه از آخرین پیام زنده گذشته است. اتصال شبکه یا وضعیت دستگاه را بررسی کنید.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )}
+
         {weightsError && (
           <Empty className="border border-amber-500/40 bg-amber-500/5 p-4 md:p-5">
             <EmptyHeader className="max-w-full">
@@ -864,7 +779,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setWeightsRefreshKey((prev) => prev + 1)}
+                onClick={() => router.refresh()}
               >
                 <RefreshCw className="size-4 ml-2" />
                 تلاش مجدد دریافت وزن

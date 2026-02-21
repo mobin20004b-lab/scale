@@ -95,18 +95,40 @@ model Scale {
   unit                 String    @default("گرم")
   precision            Int       @default(2)
   locationNote         String?
-  heartbeatIntervalSec Int       @default(1)
+  heartbeatIntervalSec Int         @default(1)
+  status               ScaleStatus @default(ONLINE)
+  outlierThreshold     Float       @default(25)
+  stableWindowSize     Int         @default(5)
   lastWeight           Float?
   lastWeightAt         DateTime?
-  isActive             Boolean   @default(true)
+  lastHeartbeatAt      DateTime?
+  lastStableWeight     Float?
+  unstableFlag         Boolean     @default(false)
+  spikeFlag            Boolean     @default(false)
+  isActive             Boolean     @default(true)
   archivedAt           DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   warehouse            Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   stockIns             StockIn[]
+  readings             ScaleReading[]
 
   @@index([warehouseId])
   @@map("scales")
+}
+
+
+model ScaleReading {
+  id               String   @id @default(cuid())
+  scaleId          String
+  rawWeight        Float
+  normalizedWeight Float
+  isOutlier        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  scale            Scale    @relation(fields: [scaleId], references: [id], onDelete: Cascade)
+
+  @@index([scaleId, createdAt])
+  @@map("scale_readings")
 }
 
 model StockOut {
@@ -142,6 +164,13 @@ model Activity {
   @@index([userId])
   @@index([createdAt])
   @@map("activities")
+}
+
+enum ScaleStatus {
+  ONLINE
+  DEGRADED
+  OFFLINE
+  ARCHIVED
 }
 
 enum UserRole {

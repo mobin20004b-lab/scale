@@ -1,8 +1,8 @@
 import { DateInput } from "@/lib/date-time"
 
-export type ScaleHealth = "ONLINE" | "STALE" | "OFFLINE"
+export type ScaleHealth = "ONLINE" | "DEGRADED" | "OFFLINE" | "ARCHIVED"
 
-export const SCALE_STALE_THRESHOLD_MS = 30 * 1000
+export const SCALE_DEGRADED_THRESHOLD_MS = 30 * 1000
 export const SCALE_OFFLINE_THRESHOLD_MS = 5 * 60 * 1000
 
 function normalizeTimestamp(value: DateInput) {
@@ -18,8 +18,24 @@ function normalizeTimestamp(value: DateInput) {
   return date.getTime()
 }
 
-export function getScaleHealthSnapshot(lastWeightAt: DateInput, now = Date.now()) {
-  const timestamp = normalizeTimestamp(lastWeightAt)
+export function getScaleHealthSnapshot(
+  lastHeartbeatAt: DateInput,
+  options?: {
+    archivedAt?: DateInput
+    now?: number
+  }
+) {
+  const now = options?.now ?? Date.now()
+  const archivedAt = normalizeTimestamp(options?.archivedAt)
+
+  if (archivedAt) {
+    return {
+      health: "ARCHIVED" as const,
+      lastReadingAgeMs: null,
+    }
+  }
+
+  const timestamp = normalizeTimestamp(lastHeartbeatAt)
   if (!timestamp) {
     return {
       health: "OFFLINE" as const,
@@ -29,7 +45,7 @@ export function getScaleHealthSnapshot(lastWeightAt: DateInput, now = Date.now()
 
   const ageMs = Math.max(0, now - timestamp)
 
-  if (ageMs <= SCALE_STALE_THRESHOLD_MS) {
+  if (ageMs <= SCALE_DEGRADED_THRESHOLD_MS) {
     return {
       health: "ONLINE" as const,
       lastReadingAgeMs: ageMs,
@@ -38,7 +54,7 @@ export function getScaleHealthSnapshot(lastWeightAt: DateInput, now = Date.now()
 
   if (ageMs <= SCALE_OFFLINE_THRESHOLD_MS) {
     return {
-      health: "STALE" as const,
+      health: "DEGRADED" as const,
       lastReadingAgeMs: ageMs,
     }
   }
