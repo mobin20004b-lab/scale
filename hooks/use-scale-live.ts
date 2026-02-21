@@ -20,6 +20,8 @@ interface UseScaleLiveOptions {
   staleAfterMs?: number;
 }
 
+export type ScaleConnectionState = "connected" | "reconnecting" | "disconnected";
+
 export function useScaleLive(
   scaleIds: string[],
   options: UseScaleLiveOptions = {}
@@ -28,6 +30,9 @@ export function useScaleLive(
   const [isConnecting, setIsConnecting] = useState(false);
   const [isStale, setIsStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [connectionState, setConnectionState] =
+    useState<ScaleConnectionState>("disconnected");
+  const [nextReconnectInMs, setNextReconnectInMs] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -75,6 +80,8 @@ export function useScaleLive(
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       setIsConnecting(false);
+      setConnectionState("disconnected");
+      setNextReconnectInMs(null);
     };
 
     if (stableIds.length === 0) {
@@ -82,6 +89,7 @@ export function useScaleLive(
       setScales({});
       setIsStale(false);
       setError(null);
+      setConnectionState("disconnected");
       return;
     }
 
@@ -98,6 +106,7 @@ export function useScaleLive(
 
       setIsConnecting(true);
       setIsStale(false);
+      setConnectionState("reconnecting");
 
       const params = new URLSearchParams({ ids: stableIds.join(",") });
       const source = new EventSource(`/api/scales/live/stream?${params.toString()}`);
@@ -124,6 +133,8 @@ export function useScaleLive(
         setScales(next);
         setError(null);
         setIsConnecting(false);
+        setConnectionState("connected");
+        setNextReconnectInMs(null);
         reconnectAttemptsRef.current = 0;
         scheduleStale();
       });
@@ -148,6 +159,7 @@ export function useScaleLive(
         }));
         setError(null);
         setIsStale(false);
+        setConnectionState("connected");
         scheduleStale();
       });
 
@@ -158,6 +170,7 @@ export function useScaleLive(
 
         setError(null);
         setIsStale(false);
+        setConnectionState("connected");
         scheduleStale();
       });
 
@@ -171,10 +184,12 @@ export function useScaleLive(
         setIsConnecting(false);
         setIsStale(true);
         setError("اتصال زنده با ترازو قطع شد. تلاش برای اتصال مجدد...");
+        setConnectionState("reconnecting");
 
         const attempt = reconnectAttemptsRef.current + 1;
         reconnectAttemptsRef.current = attempt;
         const waitMs = Math.min(1000 * 2 ** (attempt - 1), 15000);
+        setNextReconnectInMs(waitMs);
 
         reconnectTimerRef.current = setTimeout(connect, waitMs);
       };
@@ -192,6 +207,8 @@ export function useScaleLive(
     scales,
     isConnecting,
     isStale,
+    connectionState,
+    nextReconnectInMs,
     error,
     refresh: () => setRefreshKey((previous) => previous + 1),
   };
