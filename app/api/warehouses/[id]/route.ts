@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireSession } from "@/lib/route-guards"
 import { prisma } from "@/lib/prisma"
+import { requestDelete } from "@/lib/deletion-lifecycle"
 
 export async function GET(
   request: Request,
@@ -78,9 +79,9 @@ export async function DELETE(
     }
 
     const { id } = await context.params
-    await prisma.warehouse.delete({ where: { id } })
+    const result = await requestDelete("warehouse", id)
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result.body, { status: result.status })
   } catch (error) {
     console.error("[v0] Error deleting warehouse:", error)
     return NextResponse.json({ error: "Failed to delete warehouse" }, { status: 500 })

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useScaleLive } from "@/hooks/use-scale-live";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useRouter } from "next/navigation";
@@ -85,6 +85,9 @@ interface Scale {
   lastWeightAt: string | Date | null;
   archivedAt?: string | Date | null;
   isActive: boolean;
+  deleteRequestedAt?: string | Date | null;
+  deleteCommitAfter?: string | Date | null;
+  deleteConflictAt?: string | Date | null;
   _count?: {
     stockIns: number;
   };
@@ -123,9 +126,6 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const [commandTimeline, setCommandTimeline] = useState<Record<string, any[]>>({});
   const [commandBusy, setCommandBusy] = useState<Record<string, boolean>>({});
   const [configBusy, setConfigBusy] = useState<Record<string, boolean>>({});
-  const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
-    {}
-  );
 
   useEffect(() => {
     setLocalScales(scales);
@@ -137,11 +137,6 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     );
   }, [localScales]);
 
-  useEffect(() => {
-    return () => {
-      Object.values(pendingDeletes.current).forEach(clearTimeout);
-    };
-  }, []);
 
   const visibleScales = useMemo(() => {
     return localScales.filter((scale) => {
@@ -306,46 +301,59 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     }
   };
 
-  const executeDeleteScale = async (scale: Scale) => {
+  const isPendingDelete = (scale: Scale) =>
+    Boolean(scale.deleteRequestedAt && scale.deleteCommitAfter);
+
+  const deleteScale = async (scale: Scale) => {
     const response = await fetch(`/api/scales/${scale.id}`, {
       method: "DELETE",
     });
-    if (response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      toast.success(payload.archived ? "ترازو آرشیو شد" : "ترازو حذف شد");
-      router.refresh();
-    } else {
-      setLocalScales((previous) => [scale, ...previous]);
-      const payload = await response.json().catch(() => ({}));
-      toast.error(payload.error || "خطا در حذف ترازو");
-    }
-  };
+    const payload = await response.json().catch(() => ({}));
 
-  const deleteScale = (scale: Scale) => {
+    if (!response.ok) {
+      toast.error(payload.error || "خطا در حذف ترازو");
+      return;
+    }
+
     setLocalScales((previous) =>
-      previous.filter((item) => item.id !== scale.id)
+      previous.map((item) =>
+        item.id === scale.id
+          ? {
+              ...item,
+              deleteRequestedAt: payload.deleteRequestedAt ?? new Date().toISOString(),
+              deleteCommitAfter: payload.deleteCommitAfter ?? null,
+              deleteConflictAt: payload.deleteConflictAt ?? null,
+            }
+          : item
+      )
     );
 
-    pendingDeletes.current[scale.id] = setTimeout(() => {
-      delete pendingDeletes.current[scale.id];
-      executeDeleteScale(scale);
-    }, 5000);
+    toast.success("حذف ترازو در سرور زمان‌بندی شد.");
+    router.refresh();
+  };
 
-    toast("ترازو برای حذف علامت‌گذاری شد", {
-      description: "برای لغو حذف، تا ۵ ثانیه آینده بازگردانی را بزنید.",
-      action: {
-        label: "بازگردانی",
-        onClick: () => {
-          const timer = pendingDeletes.current[scale.id];
-          if (timer) {
-            clearTimeout(timer);
-            delete pendingDeletes.current[scale.id];
-            setLocalScales((previous) => [scale, ...previous]);
-            toast.success("حذف ترازو لغو شد");
-          }
-        },
-      },
+  const recoverScaleDelete = async (scale: Scale) => {
+    const response = await fetch(`/api/scales/${scale.id}/recover`, {
+      method: "POST",
     });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      toast.error(payload.error || "بازیابی حذف ترازو ناموفق بود");
+      router.refresh();
+      return;
+    }
+
+    setLocalScales((previous) =>
+      previous.map((item) =>
+        item.id === scale.id
+          ? { ...item, deleteRequestedAt: null, deleteCommitAfter: null, deleteConflictAt: null }
+          : item
+      )
+    );
+
+    toast.success("حذف ترازو بازیابی شد");
+    router.refresh();
   };
 
   const toggleScaleSelection = (scaleId: string, checked: boolean) => {
@@ -748,7 +756,10 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                     className="mt-1"
                   />
                   <div className="space-y-1">
-                    <div className="font-medium">{scale.name}</div>
+                    <div className="font-medium flex items-center gap-2">
+                      {scale.name}
+                      {isPendingDelete(scale) && <Badge variant="outline">در انتظار حذف</Badge>}
+                    </div>
                     <div className="text-sm text-muted-foreground">
                       انبار: {scale.warehouse.name}
                     </div>
@@ -810,6 +821,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                         variant="outline"
                         size="icon"
                         className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                        disabled={isPendingDelete(scale)}
                       >
                         <Trash2 className="size-4" />
                       </Button>
@@ -838,12 +850,18 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                         <AlertDialogAction
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                           onClick={() => deleteScale(scale)}
+                          disabled={isPendingDelete(scale)}
                         >
-                          {(scale._count?.stockIns ?? 0) > 0 ? "آرشیو" : "حذف"}
+                          {isPendingDelete(scale) ? "حذف زمان‌بندی شده" : "حذف"}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
+                  {isPendingDelete(scale) && (
+                    <Button variant="secondary" size="sm" onClick={() => recoverScaleDelete(scale)}>
+                      بازیابی حذف
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm">

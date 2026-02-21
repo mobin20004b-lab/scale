@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { ProductsTable } from "@/components/products-table";
 import { Button } from "@/components/ui/button";
+import { finalizeDueDeletes } from "@/lib/deletion-lifecycle";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 
@@ -27,6 +28,8 @@ export default async function ProductsPage({
   if (category) {
     whereClause.category = category;
   }
+
+  await finalizeDueDeletes("product");
 
   const [products, categories] = await Promise.all([
     prisma.product.findMany({

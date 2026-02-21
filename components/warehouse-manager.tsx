@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,9 @@ interface Warehouse {
   name: string;
   location: string | null;
   description: string | null;
+  deleteRequestedAt?: string | Date | null;
+  deleteCommitAfter?: string | Date | null;
+  deleteConflictAt?: string | Date | null;
   _count?: { scales: number; stockIns: number };
 }
 
@@ -49,19 +52,11 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
   const [description, setDescription] = useState("");
   const [search, setSearch] = useState("");
   const [localWarehouses, setLocalWarehouses] = useState(warehouses);
-  const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
-    {},
-  );
 
   useEffect(() => {
     setLocalWarehouses(warehouses);
   }, [warehouses]);
 
-  useEffect(() => {
-    return () => {
-      Object.values(pendingDeletes.current).forEach(clearTimeout);
-    };
-  }, []);
 
   const filteredWarehouses = localWarehouses.filter((warehouse) => {
     const keyword = search.trim().toLowerCase();
@@ -110,47 +105,37 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
     }
   };
 
-  const executeDeleteWarehouse = async (warehouse: Warehouse) => {
-    try {
-      const response = await fetch(`/api/warehouses/${warehouse.id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error("خطا در حذف انبار");
-      }
-      toast.success("انبار حذف شد");
-      router.refresh();
-    } catch {
-      setLocalWarehouses((previous) => [warehouse, ...previous]);
-      toast.error("خطا در حذف انبار");
+  const isPendingDelete = (warehouse: Warehouse) =>
+    Boolean(warehouse.deleteRequestedAt && warehouse.deleteCommitAfter);
+
+  const deleteWarehouse = async (warehouse: Warehouse) => {
+    const response = await fetch(`/api/warehouses/${warehouse.id}`, {
+      method: "DELETE",
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      toast.error(payload.error || "خطا در حذف انبار");
+      return;
     }
+
+    toast.success("حذف انبار در سرور زمان‌بندی شد.");
+    router.refresh();
   };
 
-  const deleteWarehouse = (warehouse: Warehouse) => {
-    setLocalWarehouses((previous) =>
-      previous.filter((item) => item.id !== warehouse.id),
-    );
-
-    pendingDeletes.current[warehouse.id] = setTimeout(() => {
-      delete pendingDeletes.current[warehouse.id];
-      executeDeleteWarehouse(warehouse);
-    }, 5000);
-
-    toast("انبار برای حذف علامت‌گذاری شد", {
-      description: "برای لغو حذف، تا ۵ ثانیه آینده بازگردانی را انتخاب کنید.",
-      action: {
-        label: "بازگردانی",
-        onClick: () => {
-          const timer = pendingDeletes.current[warehouse.id];
-          if (timer) {
-            clearTimeout(timer);
-            delete pendingDeletes.current[warehouse.id];
-            setLocalWarehouses((previous) => [warehouse, ...previous]);
-            toast.success("حذف انبار لغو شد");
-          }
-        },
-      },
+  const recoverWarehouseDelete = async (warehouse: Warehouse) => {
+    const response = await fetch(`/api/warehouses/${warehouse.id}/recover`, {
+      method: "POST",
     });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      toast.error(payload.error || "بازیابی حذف انبار ناموفق بود");
+      return;
+    }
+
+    toast.success("حذف انبار بازیابی شد");
+    router.refresh();
   };
 
   return (
@@ -248,6 +233,7 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
                 <div className="font-medium flex items-center gap-2">
                   <WarehouseIcon className="size-4 text-muted-foreground" />
                   {warehouse.name}
+                  {isPendingDelete(warehouse) && <Badge variant="outline">در انتظار حذف</Badge>}
                 </div>
                 {warehouse.location && (
                   <div className="text-sm text-muted-foreground">
@@ -296,6 +282,7 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
                       variant="outline"
                       size="icon"
                       className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                      disabled={isPendingDelete(warehouse)}
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -322,12 +309,18 @@ export function WarehouseManager({ warehouses }: WarehouseManagerProps) {
                       <AlertDialogAction
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         onClick={() => deleteWarehouse(warehouse)}
+                        disabled={isPendingDelete(warehouse)}
                       >
-                        حذف
+                        {isPendingDelete(warehouse) ? "حذف زمان‌بندی شده" : "حذف"}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
+                {isPendingDelete(warehouse) && (
+                  <Button variant="secondary" size="sm" onClick={() => recoverWarehouseDelete(warehouse)}>
+                    بازیابی حذف
+                  </Button>
+                )}
               </div>
             </div>
           </div>
