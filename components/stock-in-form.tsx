@@ -427,7 +427,7 @@ export function StockInForm({
       toast.error("محصولی با این بارکد یافت نشد؛ مورد در لیست بارکدهای ناشناخته ثبت شد.", {
         action: {
           label: "open unknown barcode queue",
-          onClick: () => router.push("/dashboard"),
+          onClick: () => router.push("/dashboard/stock-in"),
         },
       });
     }
