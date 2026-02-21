@@ -4,7 +4,11 @@ import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
 import { runIdempotentOperation } from "@/lib/idempotency";
 import { externalStockOutPayloadSchema } from "@/lib/schemas/inventory";
-import { decrementWarehouseInventory, InventoryConflictError } from "@/lib/inventory-ledger";
+import {
+  decrementWarehouseInventory,
+  InventoryConflictError,
+} from "@/lib/inventory-ledger";
+import { resolveMovementQuantityAndWeight } from "@/lib/movement-metrics";
 
 function checkAuth(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -15,14 +19,17 @@ function checkAuth(request: Request) {
 export async function POST(request: Request) {
   try {
     if (!checkAuth(request)) {
-      return NextResponse.json({ error: "Unauthorized - API key required" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized - API key required" },
+        { status: 401 }
+      );
     }
 
     const idempotencyKey = request.headers.get("Idempotency-Key");
     if (!idempotencyKey) {
       return NextResponse.json(
         { error: "Idempotency-Key header is required" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -54,12 +61,18 @@ export async function POST(request: Request) {
         }
 
         try {
+          const movement = resolveMovementQuantityAndWeight(
+            product,
+            parsed.quantity
+          );
+
           const stockOut = await prisma.$transaction(async (tx) => {
             const createdStockOut = await tx.stockOut.create({
               data: {
                 productId: parsed.productId,
                 userId: systemUser.id,
-                quantity: parsed.quantity,
+                quantity: movement.quantity,
+                weight: movement.weight,
                 customer: parsed.customer,
                 invoiceNumber: parsed.invoiceNumber,
                 notes: parsed.notes,
@@ -108,7 +121,7 @@ export async function POST(request: Request) {
 
           throw error;
         }
-      },
+      }
     );
 
     return NextResponse.json(result.body, { status: result.status });
@@ -118,6 +131,9 @@ export async function POST(request: Request) {
     }
 
     console.error("[v0] External API error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

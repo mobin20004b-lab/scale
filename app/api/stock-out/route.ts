@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
 import { stockOutPayloadSchema } from "@/lib/schemas/inventory";
-import { decrementWarehouseInventory, InventoryConflictError } from "@/lib/inventory-ledger";
+import {
+  decrementWarehouseInventory,
+  InventoryConflictError,
+} from "@/lib/inventory-ledger";
+import { resolveMovementQuantityAndWeight } from "@/lib/movement-metrics";
 
 export async function POST(request: Request) {
   try {
@@ -15,23 +19,32 @@ export async function POST(request: Request) {
 
     const parsed = stockOutPayloadSchema.parse(await request.json());
 
-    const warehouse = await prisma.warehouse.findUnique({ where: { id: parsed.warehouseId } });
+    const warehouse = await prisma.warehouse.findUnique({
+      where: { id: parsed.warehouseId },
+    });
     if (!warehouse) {
-      return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Warehouse not found" },
+        { status: 404 }
+      );
     }
 
-    const product = await prisma.product.findUnique({ where: { id: parsed.productId } });
+    const product = await prisma.product.findUnique({
+      where: { id: parsed.productId },
+    });
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
+
+    const movement = resolveMovementQuantityAndWeight(product, parsed.quantity);
 
     const stockOut = await prisma.$transaction(async (tx) => {
       const createdStockOut = await tx.stockOut.create({
         data: {
           productId: parsed.productId,
           userId: (session.user as any).id,
-          quantity: parsed.quantity,
-          weight: parsed.quantity,
+          quantity: movement.quantity,
+          weight: movement.weight,
           customer: parsed.customer,
           invoiceNumber: parsed.invoiceNumber,
           notes: parsed.notes,
@@ -71,6 +84,9 @@ export async function POST(request: Request) {
     }
 
     console.error("[v0] Error creating stock out:", error);
-    return NextResponse.json({ error: "Failed to create stock out" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create stock out" },
+      { status: 500 }
+    );
   }
 }
