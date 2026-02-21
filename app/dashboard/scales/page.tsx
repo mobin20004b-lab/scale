@@ -46,6 +46,11 @@ export default async function ScalesPage() {
     {}
   );
 
+  const scalesForUi = scales.map(({ apiKey, ...scale }) => ({
+    ...scale,
+    apiKeyLast4: apiKey.slice(-4),
+  }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -94,7 +99,7 @@ export default async function ScalesPage() {
         </CardContent>
       </Card>
 
-      <ScaleManager scales={scales} warehouses={warehouses} />
+      <ScaleManager scales={scalesForUi} warehouses={warehouses} />
     </div>
   );
 }
