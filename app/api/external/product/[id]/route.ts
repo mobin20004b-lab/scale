@@ -1,22 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-
-function checkAuth(request: Request) {
-  const authHeader = request.headers.get('authorization')
-  const apiKey = authHeader?.replace('Bearer ', '')
-  return !!apiKey
-}
+import { requireExternalApiAuth } from "@/lib/external-api-auth"
 
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!checkAuth(request)) {
-      return NextResponse.json(
-        { error: "Unauthorized - API key required" },
-        { status: 401 }
-      )
+    const auth = await requireExternalApiAuth(request);
+    if ("error" in auth) {
+      return auth.error;
     }
 
     const { id } = await context.params

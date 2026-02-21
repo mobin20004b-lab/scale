@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { requireSession } from "@/lib/route-guards"
 import { prisma } from "@/lib/prisma"
 
 export async function GET() {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const guard = await requireSession()
+    if ("error" in guard) {
+      return guard.error
     }
 
     const warehouses = await prisma.warehouse.findMany({
@@ -27,9 +27,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const guard = await requireSession({ adminOnly: true })
+    if ("error" in guard) {
+      return guard.error
     }
 
     const body = await request.json()

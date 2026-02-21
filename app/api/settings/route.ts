@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireSession } from "@/lib/route-guards"
 import { readSystemSettings, writeSystemSettings } from "@/lib/system-settings"
 
 export async function GET() {
+  const guard = await requireSession({ adminOnly: true })
+  if ("error" in guard) {
+    return guard.error
+  }
+
   const [users, settings] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },
@@ -29,6 +35,11 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const guard = await requireSession({ adminOnly: true })
+  if ("error" in guard) {
+    return guard.error
+  }
+
   const body = (await request.json()) as { settings?: unknown }
 
   if (!body.settings) {

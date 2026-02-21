@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireSession } from "@/lib/route-guards";
 import { prisma } from "@/lib/prisma";
 import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
@@ -8,9 +8,9 @@ import { normalizeBarcode } from "@/lib/barcode";
 
 export async function GET() {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const guard = await requireSession();
+    if ("error" in guard) {
+      return guard.error;
     }
 
     const products = await prisma.product.findMany({
@@ -28,9 +28,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const guard = await requireSession({ adminOnly: true });
+    if ("error" in guard) {
+      return guard.error;
     }
 
     const parsed = productPayloadSchema.parse(await request.json());
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
 
     await prisma.activity.create({
       data: {
-        userId: (session.user as any).id,
+        userId: (guard.session!.user as any).id,
         action: "ایجاد محصول",
         entity: "Product",
         entityId: product.id,

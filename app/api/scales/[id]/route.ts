@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireSession } from "@/lib/route-guards";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
@@ -7,9 +7,9 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const guard = await requireSession();
+    if ("error" in guard) {
+      return guard.error;
     }
 
     const { id } = await context.params;
@@ -44,9 +44,9 @@ export async function PUT(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const guard = await requireSession({ adminOnly: true });
+    if ("error" in guard) {
+      return guard.error;
     }
 
     const { id } = await context.params;
@@ -139,9 +139,9 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const guard = await requireSession({ adminOnly: true });
+    if ("error" in guard) {
+      return guard.error;
     }
 
     const { id } = await context.params;

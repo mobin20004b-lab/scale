@@ -6,20 +6,13 @@ import { runIdempotentOperation } from "@/lib/idempotency";
 import { externalStockInPayloadSchema } from "@/lib/schemas/inventory";
 import { incrementWarehouseInventory } from "@/lib/inventory-ledger";
 import { resolveMovementQuantityAndWeight } from "@/lib/movement-metrics";
-
-function checkAuth(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  const apiKey = authHeader?.replace("Bearer ", "");
-  return !!apiKey;
-}
+import { requireExternalApiAuth } from "@/lib/external-api-auth";
 
 export async function POST(request: Request) {
   try {
-    if (!checkAuth(request)) {
-      return NextResponse.json(
-        { error: "Unauthorized - API key required" },
-        { status: 401 }
-      );
+    const externalAuth = await requireExternalApiAuth(request);
+    if ("error" in externalAuth) {
+      return externalAuth.error;
     }
 
     const idempotencyKey = request.headers.get("Idempotency-Key");
