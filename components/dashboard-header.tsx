@@ -130,14 +130,14 @@ export function DashboardHeader({
         <CommandList>
           <CommandEmpty>نتیجه‌ای یافت نشد.</CommandEmpty>
           <CommandGroup heading="عملیات پرتکرار">
-            <CommandItem onSelect={() => router.push("/dashboard/stock-in")}>
+            <CommandItem onSelect={() => router.push("/dashboard/movements")}>
               <Plus className="size-4" />
-              ثبت ورود کالا
+              ثبت حرکت جدید
               <CommandShortcut>1</CommandShortcut>
             </CommandItem>
-            <CommandItem onSelect={() => router.push("/dashboard/stock-out")}>
+            <CommandItem onSelect={() => router.push("/dashboard/movements")}>
               <Minus className="size-4" />
-              ثبت خروج کالا
+              حالت خروج
               <CommandShortcut>2</CommandShortcut>
             </CommandItem>
             <CommandItem onSelect={() => router.push("/dashboard/products")}>

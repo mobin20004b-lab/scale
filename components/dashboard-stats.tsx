@@ -1,34 +1,34 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Package, Weight, TrendingUp, TrendingDown } from "lucide-react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Package, Weight, TrendingUp, TrendingDown } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 interface DashboardStatsProps {
-  totalProducts: number
-  totalWeight: number
-  totalStockIns: number
-  totalStockOuts: number
+  totalProducts: number;
+  totalWeight: number;
+  totalStockIns: number;
+  totalStockOuts: number;
 }
 
 export function DashboardStats({
   totalProducts,
   totalWeight,
   totalStockIns,
-  totalStockOuts
+  totalStockOuts,
 }: DashboardStatsProps) {
   const stats = [
     {
       title: "کل محصولات",
       value: totalProducts,
       icon: Package,
-      color: "text-blue-600"
+      color: "text-blue-600",
     },
     {
       title: "وزن کل (کیلوگرم)",
       value: totalWeight.toFixed(2),
       icon: Weight,
-      color: "text-purple-600"
+      color: "text-purple-600",
     },
     {
       title: "ورودی‌ها",
@@ -36,9 +36,9 @@ export function DashboardStats({
       icon: TrendingUp,
       color: "text-green-600",
       action: {
-        href: "/dashboard/stock-in",
-        label: "ثبت ورود"
-      }
+        href: "/dashboard/movements",
+        label: "ثبت حرکت",
+      },
     },
     {
       title: "خروجی‌ها",
@@ -46,16 +46,16 @@ export function DashboardStats({
       icon: TrendingDown,
       color: "text-orange-600",
       action: {
-        href: "/dashboard/stock-out",
-        label: "ثبت خروج"
-      }
-    }
-  ]
+        href: "/dashboard/movements",
+        label: "ثبت حرکت",
+      },
+    },
+  ];
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {stats.map((stat) => {
-        const Icon = stat.icon
+        const Icon = stat.icon;
         return (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -75,10 +75,10 @@ export function DashboardStats({
               )}
             </CardContent>
           </Card>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
 export function DashboardStatsSkeleton() {
@@ -96,5 +96,5 @@ export function DashboardStatsSkeleton() {
         </Card>
       ))}
     </div>
-  )
+  );
 }
