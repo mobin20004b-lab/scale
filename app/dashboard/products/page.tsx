@@ -20,6 +20,7 @@ export default async function ProductsPage({
       { name: { contains: search, mode: "insensitive" } },
       { sku: { contains: search, mode: "insensitive" } },
       { barcode: { contains: search, mode: "insensitive" } },
+      { barcodes: { some: { code: { contains: search, mode: "insensitive" }, status: "ACTIVE" } } },
     ];
   }
 
@@ -31,6 +32,7 @@ export default async function ProductsPage({
     prisma.product.findMany({
       where: whereClause,
       include: {
+        barcodes: { where: { status: "ACTIVE" }, select: { code: true, status: true } },
         _count: {
           select: {
             stockIns: true,

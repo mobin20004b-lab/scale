@@ -30,6 +30,7 @@ import { BarcodeScanner } from "./barcode-scanner";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
 import { stockOutFormSchema } from "@/lib/schemas/inventory";
+import { findProductByScannedBarcode } from "@/lib/product-barcode";
 import { EmptyStatePanel } from "@/components/ui/async-state";
 import {
   focusFirstInvalidField,
@@ -164,12 +165,17 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
     }));
   }, [parsedQuantity, selectedProduct]);
 
-  const handleBarcodeScanned = (rawBarcode: string) => {
+  const handleBarcodeScanned = async (rawBarcode: string) => {
     const [barcode, encodedQty] = rawBarcode.split("*");
-    const product = products.find((p) => p.barcode === barcode);
+    const product = findProductByScannedBarcode(products, barcode);
 
     if (!product) {
-      toast.error("محصولی با این بارکد یافت نشد");
+      await fetch("/api/barcodes/unknown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ barcode, source: "stock-out" }),
+      }).catch(() => null);
+      toast.error("محصولی با این بارکد یافت نشد؛ مورد در لیست بارکدهای ناشناخته ثبت شد.");
       return;
     }
 

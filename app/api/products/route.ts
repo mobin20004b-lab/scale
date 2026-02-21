@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
 import { productPayloadSchema } from "@/lib/schemas/inventory";
+import { normalizeBarcode } from "@/lib/barcode";
 
 export async function GET() {
   try {
@@ -13,6 +14,9 @@ export async function GET() {
     }
 
     const products = await prisma.product.findMany({
+      include: {
+        barcodes: true,
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -31,17 +35,45 @@ export async function POST(request: Request) {
 
     const parsed = productPayloadSchema.parse(await request.json());
 
+    const normalizedPrimaryBarcode = parsed.barcode ? normalizeBarcode(parsed.barcode) : null;
+
     const product = await prisma.product.create({
       data: {
         name: parsed.name,
         sku: parsed.sku || `PRD-${Date.now().toString(36).toUpperCase()}`,
-        barcode: parsed.barcode,
+        barcode: normalizedPrimaryBarcode?.normalized || null,
         category: parsed.category || "بدون دسته‌بندی",
         unit: parsed.unit,
         minStock: parsed.minStock,
         weightPerUnit: parsed.weightPerUnit,
         description: parsed.description,
         currentStock: 0,
+        barcodes: {
+          create: [
+            ...(normalizedPrimaryBarcode?.normalized
+              ? [{
+                  code: normalizedPrimaryBarcode.normalized,
+                  identifierType: "PRODUCT_STATIC" as const,
+                  symbology: normalizedPrimaryBarcode.symbology,
+                  issuer: parsed.barcodeIssuer || null,
+                  checksumValid: normalizedPrimaryBarcode.checksumValid,
+                }]
+              : []),
+            ...(parsed.barcodeAliases || []).map((code) => {
+              const normalized = normalizeBarcode(code);
+              return {
+                code: normalized.normalized,
+                identifierType: "SUPPLIER_ALIAS" as const,
+                symbology: normalized.symbology,
+                issuer: parsed.barcodeIssuer || "supplier",
+                checksumValid: normalized.checksumValid,
+              };
+            }),
+          ],
+        },
+      },
+      include: {
+        barcodes: true,
       },
     });
 

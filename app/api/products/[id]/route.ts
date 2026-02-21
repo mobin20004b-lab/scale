@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
 import { productPayloadSchema } from "@/lib/schemas/inventory";
+import { normalizeBarcode } from "@/lib/barcode";
 
 export async function PUT(
   request: Request,
@@ -17,19 +18,53 @@ export async function PUT(
 
     const { id } = await context.params;
     const parsed = productPayloadSchema.parse(await request.json());
+    const normalizedPrimaryBarcode = parsed.barcode ? normalizeBarcode(parsed.barcode) : null;
 
-    const product = await prisma.product.update({
-      where: { id },
-      data: {
-        name: parsed.name,
-        sku: parsed.sku || undefined,
-        barcode: parsed.barcode,
-        category: parsed.category || undefined,
-        unit: parsed.unit,
-        minStock: parsed.minStock,
-        weightPerUnit: parsed.weightPerUnit,
-        description: parsed.description,
-      },
+    const product = await prisma.$transaction(async (tx) => {
+      await tx.productBarcode.updateMany({
+        where: { productId: id, status: "ACTIVE" },
+        data: { status: "RETIRED", retiredAt: new Date() },
+      });
+
+      return tx.product.update({
+        where: { id },
+        data: {
+          name: parsed.name,
+          sku: parsed.sku || undefined,
+          barcode: normalizedPrimaryBarcode?.normalized || null,
+          category: parsed.category || undefined,
+          unit: parsed.unit,
+          minStock: parsed.minStock,
+          weightPerUnit: parsed.weightPerUnit,
+          description: parsed.description,
+          barcodes: {
+            create: [
+              ...(normalizedPrimaryBarcode?.normalized
+                ? [{
+                    code: normalizedPrimaryBarcode.normalized,
+                    identifierType: "PRODUCT_STATIC" as const,
+                    symbology: normalizedPrimaryBarcode.symbology,
+                    issuer: parsed.barcodeIssuer || null,
+                    checksumValid: normalizedPrimaryBarcode.checksumValid,
+                  }]
+                : []),
+              ...(parsed.barcodeAliases || []).map((code) => {
+                const normalized = normalizeBarcode(code);
+                return {
+                  code: normalized.normalized,
+                  identifierType: "SUPPLIER_ALIAS" as const,
+                  symbology: normalized.symbology,
+                  issuer: parsed.barcodeIssuer || "supplier",
+                  checksumValid: normalized.checksumValid,
+                };
+              }),
+            ],
+          },
+        },
+        include: {
+          barcodes: true,
+        },
+      });
     });
 
     await prisma.activity.create({

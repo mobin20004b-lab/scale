@@ -1,7 +1,10 @@
+"use client";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { History, Plus } from "lucide-react";
+import { History, Plus, Printer } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { DateTimeText } from "@/components/date-time-text";
 import { EmptyStatePanel } from "@/components/ui/async-state";
 
@@ -91,6 +94,7 @@ export function StockOutList({ stockOuts, highlightId }: StockOutListProps) {
                   )}
 
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => window.print()}><Printer className="size-3.5 ml-1" />چاپ مجدد لیبل</Button>
                     <span>{stockOut.user.full_name}</span>
                     <span>
                       <DateTimeText value={stockOut.createdAt} showTimeZone />
