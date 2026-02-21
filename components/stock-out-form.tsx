@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,6 +25,8 @@ import {
   PackageSearch,
   RotateCcw,
   Printer,
+  RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import { BarcodeScanner } from "./barcode-scanner";
 import { Badge } from "./ui/badge";
@@ -60,6 +62,7 @@ interface WarehouseItem {
 interface StockOutFormProps {
   products: Product[];
   warehouses: WarehouseItem[];
+  warehouseAvailability: Record<string, number>;
 }
 
 interface SubmittedStockOut {
@@ -68,23 +71,43 @@ interface SubmittedStockOut {
   quantity: number;
   customer: string;
   createdAt: Date;
+  undoWindowEndsAt: Date;
+  undoAudited: boolean;
 }
 
-export function StockOutForm({ products, warehouses }: StockOutFormProps) {
+export function StockOutForm({
+  products,
+  warehouses,
+  warehouseAvailability,
+}: StockOutFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
   const [barcodeFirstMode, setBarcodeFirstMode] = useState(false);
-  const [isProductLockedByBarcode, setIsProductLockedByBarcode] = useState(false);
+  const [isProductLockedByBarcode, setIsProductLockedByBarcode] =
+    useState(false);
   const [scannerStatus, setScannerStatus] = useState<
     "idle" | "scanning" | "success" | "error"
   >("idle");
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [lastSubmitted, setLastSubmitted] = useState<SubmittedStockOut | null>(null);
+  const [lastSubmitted, setLastSubmitted] = useState<SubmittedStockOut | null>(
+    null
+  );
   const [isUndoLoading, setIsUndoLoading] = useState(false);
+  const [liveAvailable, setLiveAvailable] = useState<number | null>(null);
+  const [availableRefreshedAt, setAvailableRefreshedAt] = useState<Date>(
+    new Date()
+  );
+  const [isRefreshingAvailability, setIsRefreshingAvailability] =
+    useState(false);
+  const [undoBlockedReason, setUndoBlockedReason] = useState<string | null>(
+    null
+  );
+  const [isUndoEligible, setIsUndoEligible] = useState(true);
   const formRef = useRef<HTMLFormElement>(null);
+  const undoWindowMs = 5 * 60 * 1000;
 
   const {
     register,
@@ -124,14 +147,24 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
     return Number.isNaN(value) ? null : value;
   }, [quantity]);
 
+  const availableNow =
+    selectedProduct && selectedWarehouseId
+      ? (liveAvailable ??
+        Number(
+          warehouseAvailability[
+            `${selectedProduct.id}:${selectedWarehouseId}`
+          ] ?? 0
+        ))
+      : null;
+
   const isOverWithdrawal =
-    selectedProduct !== null &&
+    availableNow !== null &&
     parsedQuantity !== null &&
-    parsedQuantity > Number(selectedProduct.currentStock);
+    parsedQuantity > availableNow;
 
   const remainingAfterOut =
-    selectedProduct !== null && parsedQuantity !== null
-      ? Number(selectedProduct.currentStock) - parsedQuantity
+    availableNow !== null && parsedQuantity !== null
+      ? availableNow - parsedQuantity
       : null;
 
   const willBeLowStock =
@@ -144,7 +177,8 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
     !isValid ||
     !selectedProduct ||
     isOverWithdrawal ||
-    !selectedWarehouseId;
+    !selectedWarehouseId ||
+    availableNow === null;
 
   const allocationRows = useMemo(() => {
     if (!selectedProduct) return [];
@@ -156,14 +190,86 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
     const chunkC = Number(Math.max(total - chunkA - chunkB, 0).toFixed(2));
 
     return [
-      { lot: "LOT-A", expiry: "2026-03-01", available: chunkA, strategy: "FEFO" },
-      { lot: "LOT-B", expiry: "2026-06-15", available: chunkB, strategy: "FIFO" },
-      { lot: "LOT-C", expiry: "2026-11-10", available: chunkC, strategy: "FIFO" },
+      {
+        lot: "LOT-A",
+        expiry: "2026-03-01",
+        available: chunkA,
+        strategy: "FEFO",
+      },
+      {
+        lot: "LOT-B",
+        expiry: "2026-06-15",
+        available: chunkB,
+        strategy: "FIFO",
+      },
+      {
+        lot: "LOT-C",
+        expiry: "2026-11-10",
+        available: chunkC,
+        strategy: "FIFO",
+      },
     ].map((row, index) => ({
       ...row,
       recommended: index === 0 && qty > 0,
     }));
   }, [parsedQuantity, selectedProduct]);
+
+  const refreshAvailability = async (): Promise<number | null> => {
+    if (!selectedProduct || !selectedWarehouseId) {
+      setLiveAvailable(null);
+      setAvailableRefreshedAt(new Date());
+      return null;
+    }
+
+    setIsRefreshingAvailability(true);
+    try {
+      const response = await fetch(
+        `/api/stock-out/availability?productId=${selectedProduct.id}&warehouseId=${selectedWarehouseId}`,
+        { cache: "no-store" }
+      );
+      if (!response.ok) return null;
+      const payload = await response.json();
+      const available = Number(payload.available);
+      setLiveAvailable(available);
+      setAvailableRefreshedAt(new Date(payload.refreshedAt));
+      return available;
+    } finally {
+      setIsRefreshingAvailability(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshAvailability();
+  }, [selectedProduct?.id, selectedWarehouseId]);
+
+  useEffect(() => {
+    if (!lastSubmitted) {
+      setIsUndoEligible(true);
+      setUndoBlockedReason(null);
+      return;
+    }
+
+    const checkUndoEligibility = async () => {
+      const response = await fetch(`/api/stock-out/${lastSubmitted.id}/undo`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (response.ok) {
+        setIsUndoEligible(true);
+        setUndoBlockedReason(null);
+        return;
+      }
+
+      const payload = await response.json();
+      setIsUndoEligible(false);
+      setUndoBlockedReason(
+        payload.error || payload.reason || "بازگشت مسدود شده است."
+      );
+    };
+
+    void checkUndoEligibility();
+  }, [lastSubmitted]);
 
   const handleBarcodeScanned = async (rawBarcode: string) => {
     const [barcode, encodedQty] = rawBarcode.split("*");
@@ -175,7 +281,9 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ barcode, source: "stock-out" }),
       }).catch(() => null);
-      toast.error("محصولی با این بارکد یافت نشد؛ مورد در لیست بارکدهای ناشناخته ثبت شد.");
+      toast.error(
+        "محصولی با این بارکد یافت نشد؛ مورد در لیست بارکدهای ناشناخته ثبت شد."
+      );
       return;
     }
 
@@ -197,7 +305,9 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
         shouldTouch: true,
         shouldValidate: true,
       });
-      toast.success(`محصول ${product.name} انتخاب شد و مقدار ${encodedQty} ثبت شد.`);
+      toast.success(
+        `محصول ${product.name} انتخاب شد و مقدار ${encodedQty} ثبت شد.`
+      );
     } else {
       toast.success(`محصول پیدا شد: ${product.name}`);
     }
@@ -235,21 +345,41 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
   const handleUndo = async () => {
     if (!lastSubmitted) return;
 
-    const maxUndoMs = 5 * 60 * 1000;
-    if (Date.now() - lastSubmitted.createdAt.getTime() > maxUndoMs) {
+    if (Date.now() - lastSubmitted.createdAt.getTime() > undoWindowMs) {
       toast.error("مهلت بازگشت این خروج کالا به پایان رسیده است.");
       return;
     }
 
     setIsUndoLoading(true);
+    setUndoBlockedReason(null);
     try {
+      const eligibility = await fetch(
+        `/api/stock-out/${lastSubmitted.id}/undo`,
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+      if (!eligibility.ok) {
+        const eligibilityError = await eligibility.json();
+        const reason =
+          eligibilityError.error ||
+          eligibilityError.reason ||
+          "بازگشت به دلیل وابستگی تراکنش‌های بعدی مسدود شد.";
+        setUndoBlockedReason(reason);
+        toast.error(reason);
+        return;
+      }
+
       const response = await fetch(`/api/stock-out/${lastSubmitted.id}/undo`, {
         method: "POST",
       });
 
       if (!response.ok) {
         const error = await response.json();
-        toast.error(error.error || "بازگشت خروج کالا ناموفق بود.");
+        toast.error(
+          error.error || error.reason || "بازگشت خروج کالا ناموفق بود."
+        );
         return;
       }
 
@@ -267,8 +397,15 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
     if (!selectedProduct) return;
 
     const requestedQty = parseFloat(data.quantity);
-    if (requestedQty > Number(selectedProduct.currentStock)) {
-      toast.error("موجودی کافی نیست");
+    if (availableNow !== null && requestedQty > availableNow) {
+      toast.error("موجودی انبار انتخاب‌شده کافی نیست.");
+      return;
+    }
+
+    const refreshedAvailable = await refreshAvailability();
+    const latestAvailable = refreshedAvailable ?? liveAvailable ?? availableNow;
+    if (latestAvailable !== null && requestedQty > latestAvailable) {
+      toast.error("موجودی لحظه‌ای انبار تغییر کرده و برای این خروج کافی نیست.");
       return;
     }
 
@@ -298,6 +435,8 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
           quantity: requestedQty,
           customer: data.customer || "",
           createdAt: new Date(),
+          undoWindowEndsAt: new Date(Date.now() + undoWindowMs),
+          undoAudited: true,
         });
         reset();
         setSelectedProduct(null);
@@ -387,7 +526,8 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
             </Select>
             {!selectedWarehouseId && (
               <p className="text-xs text-amber-700 dark:text-amber-300">
-                پیش از انتخاب محصول، انبار را مشخص کنید تا زمینه موجودی درست نمایش داده شود.
+                پیش از انتخاب محصول، انبار را مشخص کنید تا زمینه موجودی درست
+                نمایش داده شود.
               </p>
             )}
           </div>
@@ -437,7 +577,9 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
                     shouldTouch: true,
                     shouldValidate: true,
                   });
-                  const product = products.find((p) => p.id.toString() === value);
+                  const product = products.find(
+                    (p) => p.id.toString() === value
+                  );
                   setSelectedProduct(product || null);
                 }}
                 value={selectedProduct?.id.toString()}
@@ -455,7 +597,8 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
                 <SelectContent>
                   {products.map((product) => (
                     <SelectItem key={product.id} value={product.id.toString()}>
-                      {product.name} ({Number(product.currentStock).toFixed(2)} {product.unit})
+                      {product.name} ({Number(product.currentStock).toFixed(2)}{" "}
+                      {product.unit})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -486,7 +629,9 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
               </p>
             )}
             {errors.productId && (
-              <p className="text-sm text-destructive">{errors.productId.message}</p>
+              <p className="text-sm text-destructive">
+                {errors.productId.message}
+              </p>
             )}
           </div>
 
@@ -516,15 +661,35 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
           {selectedProduct && (
             <div className="p-3 rounded-lg bg-muted space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">موجودی فعلی:</span>
+                <span className="text-sm font-medium">
+                  موجودی قابل برداشت همین حالا:
+                </span>
                 <Badge>
-                  {Number(selectedProduct.currentStock).toFixed(2)} {selectedProduct.unit}
+                  {availableNow?.toFixed(2) ?? "0.00"} {selectedProduct.unit}
                 </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <RefreshCw className="size-3" />
+                  آخرین نوسازی:{" "}
+                  {availableRefreshedAt.toLocaleTimeString("fa-IR")}
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void refreshAvailability()}
+                  disabled={isRefreshingAvailability}
+                >
+                  بروزرسانی
+                </Button>
               </div>
               {willBeLowStock && (
                 <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
                   <AlertTriangle className="size-4" />
-                  <span className="text-xs">هشدار: موجودی به سطح بحرانی می‌رسد</span>
+                  <span className="text-xs">
+                    هشدار: موجودی پس از خروج نزدیک به سطح بحرانی می‌شود
+                  </span>
                 </div>
               )}
             </div>
@@ -541,8 +706,16 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
                   <span>{row.lot}</span>
                   <span>{row.expiry}</span>
                   <span>{row.available.toFixed(2)}</span>
-                  <span className={row.recommended ? "text-primary font-medium" : "text-muted-foreground"}>
-                    {row.recommended ? "پیشنهاد برداشت " + row.strategy : row.strategy}
+                  <span
+                    className={
+                      row.recommended
+                        ? "text-primary font-medium"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    {row.recommended
+                      ? "پیشنهاد برداشت " + row.strategy
+                      : row.strategy}
                   </span>
                 </div>
               ))}
@@ -575,8 +748,9 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
             )}
             {isOverWithdrawal && (
               <p className="text-sm text-destructive">
-                مقدار خروج از موجودی فعلی بیشتر است. مقدار را کمتر از{" "}
-                {Number(selectedProduct?.currentStock).toFixed(2)} {selectedProduct?.unit} وارد کنید.
+                مقدار خروج از موجودی انبار انتخاب‌شده بیشتر است. مقدار را کمتر
+                از {(availableNow ?? 0).toFixed(2)} {selectedProduct?.unit} وارد
+                کنید.
               </p>
             )}
             {willBeLowStock && !isOverWithdrawal && (
@@ -628,8 +802,29 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
           {lastSubmitted && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
               <p className="text-sm font-medium">عملیات با موفقیت ثبت شد.</p>
+              <p className="text-xs text-muted-foreground">
+                سیاست بازگشت: فقط تا ۵ دقیقه بعد از ثبت و تنها برای کاربران
+                ناظر/ادمین. این عملیات در لاگ فعالیت به‌صورت حسابرسی ثبت می‌شود.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                پایان پنجره بازگشت:{" "}
+                {lastSubmitted.undoWindowEndsAt.toLocaleTimeString("fa-IR")}
+              </p>
+              <div className="flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300">
+                <ShieldCheck className="size-3" />
+                {lastSubmitted.undoAudited
+                  ? "بازگشت عملیات audit trail دارد."
+                  : "وضعیت حسابرسی نامشخص است."}
+              </div>
+              {undoBlockedReason && (
+                <p className="text-xs text-destructive">{undoBlockedReason}</p>
+              )}
               <div className="flex gap-2 flex-wrap">
-                <Button type="button" variant="outline" onClick={handlePrintSlip}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePrintSlip}
+                >
                   <Printer className="size-4 ml-2" />
                   چاپ رسید تحویل
                 </Button>
@@ -637,7 +832,11 @@ export function StockOutForm({ products, warehouses }: StockOutFormProps) {
                   type="button"
                   variant="outline"
                   onClick={handleUndo}
-                  disabled={isUndoLoading}
+                  disabled={
+                    isUndoLoading ||
+                    !isUndoEligible ||
+                    Date.now() > lastSubmitted.undoWindowEndsAt.getTime()
+                  }
                 >
                   <RotateCcw className="size-4 ml-2" />
                   بازگشت ثبت خروج (تا ۵ دقیقه)

@@ -9,6 +9,7 @@ import {
   InventoryConflictError,
 } from "@/lib/inventory-ledger";
 import { resolveMovementQuantityAndWeight } from "@/lib/movement-metrics";
+import { getWarehouseAvailableQuantity } from "@/lib/warehouse-stock";
 
 export async function POST(request: Request) {
   try {
@@ -39,6 +40,17 @@ export async function POST(request: Request) {
     const movement = resolveMovementQuantityAndWeight(product, parsed.quantity);
 
     const stockOut = await prisma.$transaction(async (tx) => {
+      const availableBeforeCommit = await getWarehouseAvailableQuantity(tx, {
+        productId: parsed.productId,
+        warehouseId: parsed.warehouseId,
+      });
+
+      if (availableBeforeCommit < parsed.quantity) {
+        throw new InventoryConflictError(
+          `Requested quantity exceeds warehouse balance. Available now: ${availableBeforeCommit}`
+        );
+      }
+
       const createdStockOut = await tx.stockOut.create({
         data: {
           productId: parsed.productId,

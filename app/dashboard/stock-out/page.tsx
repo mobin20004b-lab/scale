@@ -1,6 +1,7 @@
 import { StockOutForm } from "@/components/stock-out-form";
 import { StockOutList } from "@/components/stock-out-list";
 import { prisma } from "@/lib/prisma";
+import { getWarehouseAvailableQuantity } from "@/lib/warehouse-stock";
 
 export default async function StockOutPage({
   searchParams,
@@ -11,11 +12,6 @@ export default async function StockOutPage({
 
   const [products, recentStockOuts, warehouses] = await Promise.all([
     prisma.product.findMany({
-      where: {
-        currentStock: {
-          gt: 0,
-        },
-      },
       include: {
         barcodes: {
           where: { status: "ACTIVE" },
@@ -42,6 +38,21 @@ export default async function StockOutPage({
     }),
   ]);
 
+  const warehouseAvailability = Object.fromEntries(
+    await Promise.all(
+      warehouses.flatMap((warehouse) =>
+        products.map(async (product) => {
+          const available = await getWarehouseAvailableQuantity(prisma, {
+            productId: product.id,
+            warehouseId: warehouse.id,
+          });
+
+          return [`${product.id}:${warehouse.id}`, available] as const;
+        })
+      )
+    )
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -50,7 +61,11 @@ export default async function StockOutPage({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <StockOutForm products={products} warehouses={warehouses} />
+        <StockOutForm
+          products={products}
+          warehouses={warehouses}
+          warehouseAvailability={warehouseAvailability}
+        />
         <StockOutList
           stockOuts={recentStockOuts}
           highlightId={params.highlight}

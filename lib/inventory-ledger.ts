@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 
 const DEFAULT_LOT = "";
 
@@ -20,7 +20,7 @@ export async function incrementWarehouseInventory(
     lotBatch?: string | null;
     stockInId?: string;
     notes?: string | null;
-  },
+  }
 ) {
   const lotBatch = params.lotBatch ?? DEFAULT_LOT;
 
@@ -70,7 +70,7 @@ export async function decrementWarehouseInventory(
     lotBatch?: string | null;
     stockOutId?: string;
     notes?: string | null;
-  },
+  }
 ) {
   const lotBatch = params.lotBatch ?? DEFAULT_LOT;
 
@@ -99,7 +99,9 @@ export async function decrementWarehouseInventory(
   });
 
   if (updatedProduct.count === 0) {
-    throw new InventoryConflictError("Insufficient product stock for requested quantity");
+    throw new InventoryConflictError(
+      "Insufficient product stock for requested quantity"
+    );
   }
 
   await tx.inventoryLedgerEntry.create({
@@ -124,7 +126,7 @@ export async function revertWarehouseStockOut(
     lotBatch?: string | null;
     stockOutId?: string;
     notes?: string | null;
-  },
+  }
 ) {
   const lotBatch = params.lotBatch ?? DEFAULT_LOT;
 
