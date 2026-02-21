@@ -44,8 +44,8 @@ type SystemSettings = {
 const apiEndpoints = [
   { method: "GET", path: "/api/external/products", description: "دریافت لیست تمام محصولات با موجودی فعلی" },
   { method: "GET", path: "/api/external/product/:id", description: "دریافت اطلاعات کامل یک محصول خاص" },
-  { method: "POST", path: "/api/external/stock-in", description: "ثبت ورود کالا از طریق سیستم خارجی" },
-  { method: "POST", path: "/api/external/stock-out", description: "ثبت خروج کالا از طریق سیستم خارجی" },
+  { method: "POST", path: "/api/external/stock-in", description: "ثبت ورود کالا از طریق سیستم خارجی (نیازمند هدر Idempotency-Key)" },
+  { method: "POST", path: "/api/external/stock-out", description: "ثبت خروج کالا از طریق سیستم خارجی (نیازمند هدر Idempotency-Key)" },
   { method: "GET", path: "/api/external/inventory", description: "گزارش کامل موجودی انبار" }
 ]
 
