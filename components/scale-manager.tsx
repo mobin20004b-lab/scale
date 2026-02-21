@@ -76,6 +76,12 @@ interface Scale {
   precision: number;
   locationNote: string | null;
   heartbeatIntervalSec: number;
+  deviceType?: "ESP32";
+  firmwareVersion?: string | null;
+  lastSeenAt?: string | Date | null;
+  printerType?: "TSPL" | "ESC_POS" | null;
+  printerConnection?: Record<string, unknown> | null;
+  config?: Record<string, unknown> | null;
   lastWeight: number | null;
   lastWeightAt: string | Date | null;
   archivedAt?: string | Date | null;
@@ -110,6 +116,9 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [localScales, setLocalScales] = useState(scales);
   const [selectedScaleIds, setSelectedScaleIds] = useState<string[]>([]);
+  const [commandTimeline, setCommandTimeline] = useState<Record<string, any[]>>({});
+  const [commandBusy, setCommandBusy] = useState<Record<string, boolean>>({});
+  const [configBusy, setConfigBusy] = useState<Record<string, boolean>>({});
   const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {}
   );
@@ -161,6 +170,82 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
     () => visibleScales.map((scale) => scale.id),
     [visibleScales]
   );
+
+  useEffect(() => {
+    if (visibleScaleIds.length === 0) return;
+
+    Promise.all(
+      visibleScaleIds.map(async (id) => {
+        const response = await fetch(`/api/scales/${id}/commands?take=10`);
+        if (!response.ok) return [id, []] as const;
+        const payload = await response.json();
+        return [id, payload.commands ?? []] as const;
+      })
+    )
+      .then((entries) => {
+        setCommandTimeline(Object.fromEntries(entries));
+      })
+      .catch(() => undefined);
+  }, [visibleScaleIds.join(",")]);
+
+  const enqueueCommand = async (
+    scaleId: string,
+    type: "PRINT_TEST" | "PRINT_LABEL" | "RESTART",
+    payload: Record<string, unknown> = {}
+  ) => {
+    setCommandBusy((previous) => ({ ...previous, [scaleId]: true }));
+    try {
+      const response = await fetch(`/api/scales/${scaleId}/commands`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, payload }),
+      });
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload.error || "ارسال فرمان ناموفق بود");
+      }
+
+      const data = await response.json();
+      setCommandTimeline((previous) => ({
+        ...previous,
+        [scaleId]: [data.command, ...(previous[scaleId] ?? [])].slice(0, 10),
+      }));
+      toast.success("فرمان دستگاه ثبت شد");
+    } catch (error: any) {
+      toast.error(error.message || "ارسال فرمان ناموفق بود");
+    } finally {
+      setCommandBusy((previous) => ({ ...previous, [scaleId]: false }));
+    }
+  };
+
+  const saveDeviceConfig = async (scale: Scale) => {
+    setConfigBusy((previous) => ({ ...previous, [scale.id]: true }));
+    try {
+      const response = await fetch(`/api/scales/${scale.id}/config`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          printerType: scale.printerType || "TSPL",
+          config: {
+            telemetryIntervalSec: scale.heartbeatIntervalSec,
+            stableWeightThreshold: 0.02,
+            autoPrintOnStockIn: false,
+          },
+        }),
+      });
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload.error || "ذخیره تنظیمات ناموفق بود");
+      }
+
+      toast.success("تنظیمات دستگاه ذخیره شد");
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error.message || "ذخیره تنظیمات ناموفق بود");
+    } finally {
+      setConfigBusy((previous) => ({ ...previous, [scale.id]: false }));
+    }
+  };
 
   const {
     scales: liveScales,
@@ -310,6 +395,7 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
   };
 
   const copyScaleToken = async (apiKey: string) => {
+
     try {
       await navigator.clipboard.writeText(apiKey);
       setCopiedToken(apiKey);
@@ -727,8 +813,40 @@ export function ScaleManager({ scales, warehouses }: ScaleManagerProps) {
                   )}
                 </span>
               </div>
+              <div className="grid gap-2 md:grid-cols-2 text-xs">
+                <div className="rounded-md border p-2 space-y-1">
+                  <div className="font-medium">Device & Firmware</div>
+                  <div>نوع دستگاه: {scale.deviceType || "ESP32"}</div>
+                  <div>نسخه فریمور: {scale.firmwareVersion || "-"}</div>
+                  <div>آخرین حضور: {scale.lastSeenAt ? <DateTimeText value={scale.lastSeenAt} showTimeZone /> : "-"}</div>
+                  <div>پرینتر: {scale.printerType || "-"}</div>
+                </div>
+                <div className="rounded-md border p-2 space-y-2">
+                  <div className="font-medium">Printer Control</div>
+                  <div className="flex flex-wrap gap-1">
+                    <Button size="sm" variant="secondary" disabled={health === "OFFLINE" || commandBusy[scale.id]} onClick={() => enqueueCommand(scale.id, "PRINT_TEST")}>تست چاپ</Button>
+                    <Button size="sm" variant="secondary" disabled={health === "OFFLINE" || commandBusy[scale.id]} onClick={() => enqueueCommand(scale.id, "PRINT_LABEL", { source: "latest-stock-in" })}>چاپ آخرین ورود</Button>
+                    <Button size="sm" variant="secondary" disabled={health === "OFFLINE" || commandBusy[scale.id]} onClick={() => enqueueCommand(scale.id, "PRINT_LABEL", { source: "reprint-last" })}>چاپ مجدد</Button>
+                    <Button size="sm" variant="outline" disabled={health === "OFFLINE" || configBusy[scale.id]} onClick={() => saveDeviceConfig(scale)}>ذخیره تنظیمات</Button>
+                  </div>
+                </div>
+                <div className="rounded-md border p-2 space-y-1 md:col-span-2">
+                  <div className="font-medium">Command Timeline</div>
+                  <div className="space-y-1">
+                    {(commandTimeline[scale.id] ?? []).slice(0, 3).map((item) => (
+                      <div key={item.id} className="flex items-center justify-between text-[11px]">
+                        <span>{item.type}</span>
+                        <Badge variant={item.status === "ACKED" ? "default" : item.status === "FAILED" ? "destructive" : "secondary"}>{item.status}</Badge>
+                      </div>
+                    ))}
+                    {(commandTimeline[scale.id] ?? []).length === 0 && (
+                      <div className="text-muted-foreground text-[11px]">فرمانی ثبت نشده است.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
               <div className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground font-mono">
-                POST /api/external/stock-in + header: x-scale-token
+                Device pull: GET /api/scales/:id/device/next-command (Bearer token)
               </div>
             </div>
           );

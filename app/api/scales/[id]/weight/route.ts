@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { scaleLiveHub } from "@/lib/scale-live-hub";
+import { authenticateScaleDevice } from "@/lib/scale-device-auth";
 
 export async function GET(
   request: Request,
@@ -48,22 +49,16 @@ export async function POST(
 ) {
   try {
     const { id } = await context.params;
-    const authorization = request.headers.get("authorization") || "";
-    const token = authorization.startsWith("Bearer ")
-      ? authorization.slice(7)
-      : "";
+    const authResult = await authenticateScaleDevice(
+      id,
+      request.headers.get("authorization") || ""
+    );
 
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const scale = await prisma.scale.findUnique({ where: { id } });
-    if (!scale) {
-      return NextResponse.json({ error: "Scale not found" }, { status: 404 });
-    }
-
-    if (scale.apiKey !== token) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    if ("error" in authResult) {
+      return NextResponse.json(
+        { error: authResult.error },
+        { status: authResult.status }
+      );
     }
 
     const body = await request.json();
@@ -87,7 +82,10 @@ export async function POST(
       },
       data: {
         lastWeight: weight,
-        lastWeightAt: new Date(),
+        lastWeightAt: body?.weightAt ? new Date(body.weightAt) : new Date(),
+        lastSeenAt: new Date(),
+        firmwareVersion:
+          typeof body?.firmwareVersion === "string" ? body.firmwareVersion : undefined,
       },
     });
 
