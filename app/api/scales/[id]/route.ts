@@ -60,6 +60,12 @@ export async function PUT(
       precision,
       locationNote,
       heartbeatIntervalSec,
+      deviceType,
+      firmwareVersion,
+      printerType,
+      printerConnection,
+      config,
+      lastSeenAt,
     } = body;
 
     const parsedPrecision = Number.isFinite(precision)
@@ -87,6 +93,19 @@ export async function PUT(
           parsedHeartbeat === undefined
             ? undefined
             : Math.max(1, parsedHeartbeat),
+        deviceType: deviceType ?? undefined,
+        firmwareVersion:
+          firmwareVersion === undefined ? undefined : firmwareVersion || null,
+        printerType: printerType ?? undefined,
+        printerConnection:
+          printerConnection === undefined ? undefined : printerConnection || null,
+        config: config === undefined ? undefined : config || null,
+        lastSeenAt:
+          lastSeenAt === undefined
+            ? undefined
+            : lastSeenAt
+              ? new Date(lastSeenAt)
+              : null,
       },
       include: {
         warehouse: {

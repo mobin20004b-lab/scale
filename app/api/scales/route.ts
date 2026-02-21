@@ -45,6 +45,11 @@ export async function POST(request: Request) {
       precision,
       locationNote,
       heartbeatIntervalSec,
+      deviceType,
+      firmwareVersion,
+      printerType,
+      printerConnection,
+      config,
     } = body;
 
     if (!name?.trim() || !warehouseId) {
@@ -69,6 +74,11 @@ export async function POST(request: Request) {
         precision: Math.min(4, Math.max(0, parsedPrecision)),
         locationNote: locationNote?.trim() || null,
         heartbeatIntervalSec: Math.max(1, parsedHeartbeat),
+        deviceType: deviceType ?? "ESP32",
+        firmwareVersion: firmwareVersion?.trim() || null,
+        printerType: printerType ?? null,
+        printerConnection: printerConnection ?? null,
+        config: config ?? null,
       },
       include: {
         warehouse: {

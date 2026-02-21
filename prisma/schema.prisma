@@ -146,6 +146,12 @@ model Scale {
   id                   String    @id @default(cuid())
   name                 String
   apiKey               String    @unique @default(cuid())
+  deviceType           ScaleDeviceType @default(ESP32)
+  firmwareVersion      String?
+  lastSeenAt           DateTime?
+  printerType          PrinterType?
+  printerConnection    Json?
+  config               Json?
   warehouseId          String
   tare                 Float     @default(0)
   unit                 String    @default("گرم")
@@ -160,9 +166,48 @@ model Scale {
   updatedAt            DateTime  @updatedAt
   warehouse            Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   stockIns             StockIn[]
+  commands             ScaleCommand[]
+  telemetries          ScaleTelemetry[]
 
   @@index([warehouseId])
   @@map("scales")
+}
+
+model ScaleCommand {
+  id                String   @id @default(cuid())
+  scaleId           String
+  type              ScaleCommandType
+  payload           Json
+  status            ScaleCommandStatus @default(PENDING)
+  nonce             String?
+  requestedByUserId String?
+  sentAt            DateTime?
+  ackedAt           DateTime?
+  expiresAt         DateTime?
+  error             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  scale             Scale    @relation(fields: [scaleId], references: [id], onDelete: Cascade)
+
+  @@index([scaleId, status, createdAt])
+  @@index([requestedByUserId, createdAt])
+  @@map("scale_commands")
+}
+
+model ScaleTelemetry {
+  id          String   @id @default(cuid())
+  scaleId     String
+  rssi        Int?
+  freeHeap    Int?
+  uptimeSec   Int?
+  temperature Float?
+  battery     Float?
+  payload     Json?
+  createdAt   DateTime @default(now())
+  scale       Scale    @relation(fields: [scaleId], references: [id], onDelete: Cascade)
+
+  @@index([scaleId, createdAt])
+  @@map("scale_telemetry")
 }
 
 model StockOut {
@@ -319,4 +364,28 @@ enum InventoryMovementType {
   STOCK_IN
   STOCK_OUT
   STOCK_OUT_UNDO
+}
+
+enum ScaleDeviceType {
+  ESP32
+}
+
+enum PrinterType {
+  TSPL
+  ESC_POS
+}
+
+enum ScaleCommandType {
+  PRINT_LABEL
+  PRINT_TEST
+  SET_CONFIG
+  RESTART
+}
+
+enum ScaleCommandStatus {
+  PENDING
+  SENT
+  ACKED
+  FAILED
+  EXPIRED
 }
