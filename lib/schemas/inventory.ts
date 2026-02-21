@@ -89,6 +89,12 @@ export const stockInPayloadSchema = z.object({
   expiryDate: optionalNullableText,
   supplierLot: optionalNullableText,
   qualityResult: optionalNullableText,
+  capturedAt: z.string().datetime().optional().nullable(),
+  stableWindowMs: z.coerce.number().int().positive().optional().nullable(),
+  sourceScaleId: z.string().trim().optional().nullable(),
+  confidence: z.coerce.number().min(0).max(1).optional().nullable(),
+  captureSource: z.enum(["current", "stable-average", "auto", "locked", "manual"]).optional().nullable(),
+  manualEntryReason: optionalNullableText,
 });
 
 export const stockOutPayloadSchema = z.object({

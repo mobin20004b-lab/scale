@@ -55,6 +55,12 @@ model StockIn {
   quantity      Float
   weight        Float
   scaleWeight   Float?
+  capturedAt    DateTime?
+  stableWindowMs Int?
+  sourceScaleId String?
+  confidence    Float?
+  captureSource String?
+  manualEntryReason String?
   supplier      String?
   invoiceNumber String?
   sourceDocumentType String?

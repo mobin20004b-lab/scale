@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, RefreshCcw, Scan, Plus, TriangleAlert, Info } from "lucide-react";
+import { Loader2, RefreshCcw, Scan, Plus, TriangleAlert, Info, Lock, CheckCircle2, Volume2 } from "lucide-react";
 import { useScaleLive } from "@/hooks/use-scale-live";
 import { BarcodeScanner } from "./barcode-scanner";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { stockInFormSchema } from "@/lib/schemas/inventory";
 import { formatScaleWeight } from "@/lib/scale-reading";
 import { EmptyStatePanel } from "@/components/ui/async-state";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   focusFirstInvalidField,
   FormErrorSummary,
@@ -49,6 +52,7 @@ interface Product {
   barcode: string | null;
   unit: string;
   currentStock: number;
+  weightPerUnit: number;
 }
 
 interface Warehouse {
@@ -71,6 +75,19 @@ interface StockInFormProps {
   scales: Scale[];
 }
 
+const SPARKLINE_WINDOW_MS = 10000;
+const STABLE_AVERAGE_WINDOW_MS = 2000;
+const DEFAULT_AUTO_CAPTURE_READINGS = 4;
+const DEFAULT_MANUAL_REASON = "Scale unavailable";
+
+type WeightTrendPoint = { value: number; timestamp: number };
+
+function getStatusLabel(status: "stable" | "fluctuating" | "stale") {
+  if (status === "stable") return "Stable";
+  if (status === "fluctuating") return "Fluctuating";
+  return "Stale";
+}
+
 export function StockInForm({
   products,
   warehouses,
@@ -84,10 +101,20 @@ export function StockInForm({
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [selectedScaleId, setSelectedScaleId] = useState<string>("");
   const [liveWeight, setLiveWeight] = useState<number | null>(null);
+  const [weightTrend, setWeightTrend] = useState<WeightTrendPoint[]>([]);
+  const [isWeightLocked, setIsWeightLocked] = useState(false);
+  const [lockedWeight, setLockedWeight] = useState<number | null>(null);
+  const [useAutoCapture, setUseAutoCapture] = useState(false);
+  const [autoCaptureReadings, setAutoCaptureReadings] = useState(DEFAULT_AUTO_CAPTURE_READINGS);
   const [scannerStatus, setScannerStatus] = useState<
     "idle" | "scanning" | "success" | "error"
   >("idle");
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [manualMode, setManualMode] = useState(false);
+  const [manualReason, setManualReason] = useState("");
+  const [playAudioFeedback, setPlayAudioFeedback] = useState(false);
+  const [capturedAt, setCapturedAt] = useState<string | null>(null);
+  const [captureSource, setCaptureSource] = useState<"current" | "stable-average" | "auto" | "locked" | "manual" | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const {
@@ -151,8 +178,24 @@ export function StockInForm({
     return { current, after: current + parsedQuantity };
   }, [quantity, selectedProduct]);
 
+  const expectedPackWeight = useMemo(() => {
+    if (!selectedProduct) return null;
+    return Number(selectedProduct.weightPerUnit || 0);
+  }, [selectedProduct]);
+
+  const capturedQuantityNumber = Number(quantity);
+  const packWeightDeviation =
+    expectedPackWeight && Number.isFinite(capturedQuantityNumber)
+      ? Math.abs(capturedQuantityNumber - expectedPackWeight)
+      : null;
+
   const isSubmitDisabled =
-    isLoading || !isValid || !productId || !selectedWarehouseId || !selectedScaleId;
+    isLoading ||
+    !isValid ||
+    !productId ||
+    !selectedWarehouseId ||
+    (!manualMode && !selectedScaleId) ||
+    (manualMode && manualReason.trim().length === 0);
 
   useEffect(() => {
     const presetProductId = searchParams.get("productId");
@@ -174,6 +217,8 @@ export function StockInForm({
     scales: liveScales,
     isConnecting: isFetchingWeight,
     isStale: isWeightStale,
+    connectionState,
+    nextReconnectInMs,
     error: weightError,
     refresh: refreshWeight,
   } = useScaleLive(selectedScaleId ? [selectedScaleId] : []);
@@ -186,6 +231,114 @@ export function StockInForm({
 
     setLiveWeight(liveScales[selectedScaleId]?.lastWeight ?? null);
   }, [liveScales, selectedScaleId]);
+
+  const selectedScaleLive = selectedScaleId ? liveScales[selectedScaleId] : null;
+  const precision = selectedScale?.precision ?? 2;
+  const unit = selectedScale?.unit ?? "";
+  const tolerance = useMemo(() => Math.max(10 ** -precision, 0.001), [precision]);
+
+  useEffect(() => {
+    if (liveWeight === null || isWeightLocked) {
+      return;
+    }
+
+    setWeightTrend((previous) => {
+      const now = Date.now();
+      const next = [...previous, { value: liveWeight, timestamp: now }].filter(
+        (point) => now - point.timestamp <= SPARKLINE_WINDOW_MS
+      );
+      return next.slice(-80);
+    });
+  }, [isWeightLocked, liveWeight]);
+
+  const stableWindowPoints = useMemo(() => {
+    const now = Date.now();
+    return weightTrend.filter((point) => now - point.timestamp <= STABLE_AVERAGE_WINDOW_MS);
+  }, [weightTrend, liveWeight]);
+
+  const stableAverage = useMemo(() => {
+    if (stableWindowPoints.length === 0) {
+      return null;
+    }
+
+    const total = stableWindowPoints.reduce((sum, point) => sum + point.value, 0);
+    return total / stableWindowPoints.length;
+  }, [stableWindowPoints]);
+
+  const stableSpread = useMemo(() => {
+    if (stableWindowPoints.length === 0) {
+      return null;
+    }
+
+    const values = stableWindowPoints.map((point) => point.value);
+    return Math.max(...values) - Math.min(...values);
+  }, [stableWindowPoints]);
+
+  const isStable = Boolean(
+    stableAverage !== null &&
+      stableSpread !== null &&
+      stableSpread <= tolerance &&
+      stableWindowPoints.length >= autoCaptureReadings
+  );
+
+  const scaleStatus: "stable" | "fluctuating" | "stale" = isWeightStale
+    ? "stale"
+    : isStable
+      ? "stable"
+      : "fluctuating";
+
+  const lastReadingAgeMs = selectedScaleLive?.lastReadingAgeMs ?? null;
+
+  const grossWeight = liveWeight;
+  const tareWeight = selectedScale?.tare ?? 0;
+  const netWeight =
+    grossWeight === null ? null : Math.max(0, Number((grossWeight - tareWeight).toFixed(precision)));
+
+  const setCapturedQuantity = (value: number, source: "current" | "stable-average" | "auto" | "locked" | "manual") => {
+    setValue("quantity", String(Number(value.toFixed(precision))), {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+    setCapturedAt(new Date().toISOString());
+    setCaptureSource(source);
+
+    if (playAudioFeedback && typeof window !== "undefined") {
+      const context = new AudioContext();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.frequency.value = source === "auto" ? 1120 : 940;
+      gain.gain.value = 0.05;
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.09);
+    }
+  };
+
+  useEffect(() => {
+    if (!useAutoCapture || !isStable || stableAverage === null || isWeightLocked || manualMode) {
+      return;
+    }
+
+    setCapturedQuantity(stableAverage, "auto");
+  }, [useAutoCapture, isStable, stableAverage, isWeightLocked, manualMode]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== "F9") {
+        return;
+      }
+
+      event.preventDefault();
+      if (!isSubmitDisabled) {
+        formRef.current?.requestSubmit();
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isSubmitDisabled]);
 
   const handleBarcodeScanned = (barcode: string) => {
     const product = products.find((p) => p.barcode === barcode);
@@ -205,6 +358,11 @@ export function StockInForm({
   };
 
   const onSubmit = async (data: StockInFormData) => {
+    if (manualMode && manualReason.trim().length === 0) {
+      toast.error("در حالت دستی، ثبت دلیل الزامی است.");
+      return;
+    }
+
     setIsLoading(true);
     setSaveState("saving");
     const toastId = toast.loading("Saving...", { duration: Infinity });
@@ -218,8 +376,14 @@ export function StockInForm({
           productId: data.productId,
           quantity: parseFloat(data.quantity),
           warehouseId: selectedWarehouseId || null,
-          scaleId: selectedScaleId || null,
-          scaleWeight: liveWeight,
+          scaleId: manualMode ? null : selectedScaleId || null,
+          scaleWeight: manualMode ? null : liveWeight,
+          capturedAt,
+          stableWindowMs: STABLE_AVERAGE_WINDOW_MS,
+          sourceScaleId: manualMode ? null : selectedScaleId || null,
+          confidence: isStable ? 0.95 : 0.65,
+          captureSource: captureSource ?? (manualMode ? "manual" : "current"),
+          manualEntryReason: manualMode ? manualReason || DEFAULT_MANUAL_REASON : null,
         }),
       });
 
@@ -231,6 +395,12 @@ export function StockInForm({
         setSelectedWarehouseId("");
         setSelectedScaleId("");
         setLiveWeight(null);
+        setWeightTrend([]);
+        setIsWeightLocked(false);
+        setLockedWeight(null);
+        setCapturedAt(null);
+        setCaptureSource(null);
+        setManualReason("");
         router.refresh();
       } else {
         const error = await response.json();
@@ -355,85 +525,154 @@ export function StockInForm({
             </Empty>
           )}
 
-          {selectedScaleId && (
-            <div className="space-y-3">
-              {isFetchingWeight && <Skeleton className="h-14 w-full" />}
+          <div className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">Scale Status Widget</p>
+                <p className="text-xs text-muted-foreground">scan → weigh → confirm</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="manual-mode" className="text-xs">حالت دستی</Label>
+                <Switch
+                  id="manual-mode"
+                  checked={manualMode}
+                  onCheckedChange={setManualMode}
+                />
+              </div>
+            </div>
 
-              {(weightError || isWeightStale) && (
-                <Empty className="gap-3 border border-destructive/40 bg-destructive/5 p-4">
-                  <EmptyHeader className="max-w-full">
-                    <EmptyMedia
-                      variant="icon"
-                      className="bg-destructive/10 text-destructive"
-                    >
-                      <TriangleAlert className="size-5" />
-                    </EmptyMedia>
-                    <EmptyTitle className="text-base">
-                      خطا در دریافت وزن ترازو
-                    </EmptyTitle>
-                    <EmptyDescription>
-                      {weightError ||
-                        "داده وزن به‌روز نیست. اتصال لحظه‌ای ممکن است ناپایدار باشد."}
-                    </EmptyDescription>
-                  </EmptyHeader>
-                  <EmptyContent>
+            {manualMode && (
+              <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+                <p className="text-xs">Scale unavailable: manual entry enabled.</p>
+                <Input
+                  value={manualReason}
+                  onChange={(event) => setManualReason(event.target.value)}
+                  placeholder="دلیل ورود دستی (اجباری)"
+                />
+              </div>
+            )}
+
+            {selectedScaleId && !manualMode && (
+              <>
+                {isFetchingWeight && <Skeleton className="h-16 w-full" />}
+
+                {(weightError || isWeightStale) && (
+                  <Empty className="gap-3 border border-destructive/40 bg-destructive/5 p-4">
+                    <EmptyHeader className="max-w-full">
+                      <EmptyMedia variant="icon" className="bg-destructive/10 text-destructive">
+                        <TriangleAlert className="size-5" />
+                      </EmptyMedia>
+                      <EmptyTitle className="text-base">خطا در دریافت وزن ترازو</EmptyTitle>
+                      <EmptyDescription>
+                        {weightError || "داده وزن به‌روز نیست. اتصال لحظه‌ای ممکن است ناپایدار باشد."}
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button type="button" variant="outline" onClick={refreshWeight}>
+                        <RefreshCcw className="size-4 ml-2" />
+                        تلاش مجدد
+                      </Button>
+                    </EmptyContent>
+                  </Empty>
+                )}
+
+                <div className="rounded-lg border bg-primary/5 p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Live Weight</p>
+                      <p className="text-4xl font-bold leading-none" dir="ltr">
+                        {liveWeight !== null ? liveWeight.toFixed(precision) : "--"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">{unit} · ±{tolerance.toFixed(precision)}</p>
+                    </div>
+                    <Badge variant={scaleStatus === "stable" ? "default" : scaleStatus === "fluctuating" ? "secondary" : "destructive"}>
+                      {getStatusLabel(scaleStatus)}
+                    </Badge>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    last update {lastReadingAgeMs ?? "--"} ms ago · connection: {connectionState}
+                    {connectionState === "reconnecting" && nextReconnectInMs !== null && ` (retry in ${nextReconnectInMs} ms)`}
+                  </div>
+
+                  <div className="h-12 w-full rounded-md border bg-background/70 p-2 flex items-end gap-1">
+                    {(weightTrend.length > 1 ? weightTrend : [{ value: 0, timestamp: 0 }]).map((point, index, all) => {
+                      const values = all.map((item) => item.value);
+                      const min = Math.min(...values);
+                      const max = Math.max(...values);
+                      const range = Math.max(0.0001, max - min);
+                      const height = 20 + ((point.value - min) / range) * 80;
+                      return <div key={`${point.timestamp}-${index}`} className="w-1 rounded-sm bg-primary/70" style={{ height: `${height}%` }} />;
+                    })}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded border p-2">Tare: {tareWeight.toFixed(precision)} {unit}</div>
+                    <div className="rounded border p-2">Gross: {grossWeight !== null ? grossWeight.toFixed(precision) : "--"} {unit}</div>
+                    <div className="rounded border p-2 col-span-2">Net: {netWeight !== null ? netWeight.toFixed(precision) : "--"} {unit}</div>
+                  </div>
+
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <Button type="button" size="sm" variant="secondary" onClick={() => liveWeight !== null && setCapturedQuantity(liveWeight, "current")}>
+                      Use current
+                    </Button>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => stableAverage !== null && setCapturedQuantity(stableAverage, "stable-average")}>
+                      Use stable average (2s)
+                    </Button>
                     <Button
                       type="button"
-                      variant="outline"
-                      onClick={refreshWeight}
-                      aria-describedby="scale-status-live"
+                      size="sm"
+                      variant={isWeightLocked ? "default" : "outline"}
+                      onClick={() => {
+                        if (!isWeightLocked && liveWeight !== null) {
+                          setLockedWeight(liveWeight);
+                          setCapturedQuantity(liveWeight, "locked");
+                        }
+                        setIsWeightLocked((previous) => !previous);
+                      }}
                     >
-                      <RefreshCcw className="size-4 ml-2" />
-                      تلاش مجدد
+                      <Lock className="size-4 ml-1" />
+                      Lock weight
                     </Button>
-                  </EmptyContent>
-                </Empty>
-              )}
+                  </div>
 
-              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-between">
-                <div className="text-sm font-medium">
-                  وزن زنده:{" "}
-                  {liveWeight !== null
-                    ? formatScaleWeight(liveWeight, selectedScale ?? {})
-                    : "--"}
+                  <div className="flex items-center justify-between rounded border p-2">
+                    <div>
+                      <p className="text-xs font-medium">Auto-capture when stable</p>
+                      <p className="text-xs text-muted-foreground">N readings within ± tolerance</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch checked={useAutoCapture} onCheckedChange={setUseAutoCapture} />
+                      <Input
+                        type="number"
+                        className="w-20 h-8"
+                        value={autoCaptureReadings}
+                        min={2}
+                        onChange={(event) => setAutoCaptureReadings(Math.max(2, Number(event.target.value) || 2))}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    if (liveWeight !== null) {
-                      setValue("quantity", String(liveWeight), {
-                        shouldDirty: true,
-                        shouldTouch: true,
-                        shouldValidate: true,
-                      });
-                    }
-                  }}
-                >
-                  استفاده از وزن ترازو
-                </Button>
-              </div>
+              </>
+            )}
 
-              <p
-                className="sr-only"
-                id="scale-status-live"
-                role="status"
-                aria-live="polite"
-              >
-                {liveWeight !== null
-                  ? `وزن فعلی ${liveWeight}`
-                  : "وزن قابل دریافت نیست"}
+            {captureSource && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <CheckCircle2 className="size-3" /> captured via {captureSource}
+                {capturedAt ? ` at ${new Date(capturedAt).toLocaleTimeString()}` : ""}
+                {lockedWeight !== null && isWeightLocked ? ` · locked ${lockedWeight.toFixed(precision)}` : ""}
               </p>
+            )}
 
-              {selectedScale && (
-                <div className="text-xs text-muted-foreground">
-                  تار: {selectedScale.tare} · دقت: {selectedScale.precision} ·
-                  واحد: {selectedScale.unit}
-                </div>
-              )}
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="audio-feedback"
+                checked={playAudioFeedback}
+                onCheckedChange={(checked) => setPlayAudioFeedback(Boolean(checked))}
+              />
+              <Label htmlFor="audio-feedback" className="text-xs flex items-center gap-1"><Volume2 className="size-3" />بازخورد صوتی در کپچر/ثبت</Label>
             </div>
-          )}
+          </div>
 
           <div className="space-y-2">
             <Label>محصول *</Label>
@@ -552,6 +791,11 @@ export function StockInForm({
                 ? `واحد انتخابی: ${selectedProduct.unit}. مثال: 2.5 ${selectedProduct.unit}`
                 : "پس از انتخاب محصول، واحد و مثال ورود مقدار نمایش داده می‌شود."}
             </p>
+            {packWeightDeviation !== null && expectedPackWeight !== null && packWeightDeviation > Math.max(expectedPackWeight * 0.15, tolerance) && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                هشدار: مقدار ثبت‌شده اختلاف زیادی با وزن مورد انتظار بسته دارد.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

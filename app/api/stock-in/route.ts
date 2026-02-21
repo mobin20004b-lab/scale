@@ -41,6 +41,12 @@ export async function POST(request: Request) {
           warehouseId: parsed.warehouseId || null,
           scaleId: parsed.scaleId || null,
           scaleWeight: parsed.scaleWeight,
+          capturedAt: parsed.capturedAt ? new Date(parsed.capturedAt) : null,
+          stableWindowMs: parsed.stableWindowMs ?? null,
+          sourceScaleId: parsed.sourceScaleId ?? null,
+          confidence: parsed.confidence ?? null,
+          captureSource: parsed.captureSource ?? null,
+          manualEntryReason: parsed.manualEntryReason ?? null,
         },
       });
 
