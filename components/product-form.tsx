@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Upload } from "lucide-react";
 import { productFormSchema } from "@/lib/schemas/inventory";
 import { FormField } from "@/components/forms/form-field";
 import {
@@ -36,11 +37,15 @@ export function ProductForm({ product }: ProductFormProps) {
     sku: string;
     barcode?: string | null;
   } | null>(null);
+  const [skuValidation, setSkuValidation] = useState<"idle" | "checking" | "unique" | "duplicate">("idle");
+  const [barcodeValidation, setBarcodeValidation] = useState<"idle" | "checking" | "unique" | "duplicate">("idle");
+  const [imagePreview, setImagePreview] = useState<string>(product?.imageUrl || "");
   const formRef = useRef<HTMLFormElement>(null);
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isDirty, touchedFields },
     watch,
   } = useForm<ProductFormData>({
@@ -57,11 +62,13 @@ export function ProductForm({ product }: ProductFormProps) {
           unit: product.unit,
           minStock: product.minStock.toString(),
           weightPerUnit: product.weightPerUnit?.toString() || "",
+          imageUrl: product.imageUrl || "",
           description: product.description || "",
         }
       : {
           unit: "کیلوگرم",
           weightPerUnit: "",
+          imageUrl: "",
           barcodeAliases: "",
           barcodeIssuer: "",
         },
@@ -89,6 +96,61 @@ export function ProductForm({ product }: ProductFormProps) {
     errors.weightPerUnit?.message,
     "مثال: 250 (گرم برای هر واحد)"
   );
+
+
+  const watchedSku = watch("sku");
+  const watchedBarcode = watch("barcode");
+
+  useEffect(() => {
+    const value = (watchedSku || "").trim();
+    if (!value) {
+      setSkuValidation("idle");
+      return;
+    }
+
+    const timeout = setTimeout(async () => {
+      setSkuValidation("checking");
+      const params = new URLSearchParams({ sku: value });
+      if (product?.id) params.set("excludeId", product.id);
+      const response = await fetch(`/api/products/validate?${params.toString()}`);
+      const payload = await response.json().catch(() => null);
+      setSkuValidation(payload?.sku?.exists ? "duplicate" : "unique");
+    }, 350);
+
+    return () => clearTimeout(timeout);
+  }, [watchedSku, product?.id]);
+
+  useEffect(() => {
+    const value = (watchedBarcode || "").trim();
+    if (!value) {
+      setBarcodeValidation("idle");
+      return;
+    }
+
+    const timeout = setTimeout(async () => {
+      setBarcodeValidation("checking");
+      const params = new URLSearchParams({ barcode: value });
+      if (product?.id) params.set("excludeId", product.id);
+      const response = await fetch(`/api/products/validate?${params.toString()}`);
+      const payload = await response.json().catch(() => null);
+      setBarcodeValidation(payload?.barcode?.exists ? "duplicate" : "unique");
+    }, 350);
+
+    return () => clearTimeout(timeout);
+  }, [watchedBarcode, product?.id]);
+
+  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      setImagePreview(dataUrl);
+      setValue("imageUrl", dataUrl, { shouldDirty: true, shouldValidate: true });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handlePrintLabel = () => {
     if (!lastSavedLabelData) return;
@@ -222,6 +284,9 @@ export function ProductForm({ product }: ProductFormProps) {
                 disabled={isLoading}
                 dir="ltr"
               />
+              {skuValidation === "checking" && <p className="text-xs text-muted-foreground mt-1">در حال بررسی یکتا بودن...</p>}
+              {skuValidation === "duplicate" && <p className="text-xs text-destructive mt-1">این SKU قبلاً ثبت شده است.</p>}
+              {skuValidation === "unique" && <p className="text-xs text-emerald-600 mt-1">SKU قابل استفاده است.</p>}
             </FormField>
 
             <FormField id="barcode" label="بارکد">
@@ -231,6 +296,9 @@ export function ProductForm({ product }: ProductFormProps) {
                 disabled={isLoading}
                 dir="ltr"
               />
+              {barcodeValidation === "checking" && <p className="text-xs text-muted-foreground mt-1">در حال بررسی یکتا بودن...</p>}
+              {barcodeValidation === "duplicate" && <p className="text-xs text-destructive mt-1">این بارکد قبلاً ثبت شده است.</p>}
+              {barcodeValidation === "unique" && <p className="text-xs text-emerald-600 mt-1">بارکد قابل استفاده است.</p>}
             </FormField>
 
 
@@ -336,6 +404,21 @@ export function ProductForm({ product }: ProductFormProps) {
                 aria-invalid={!!errors.weightPerUnit}
                 aria-describedby={weightA11y.describedBy}
               />
+            </FormField>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField id="productImage" label="تصویر محصول (اختیاری)">
+              <div className="space-y-2">
+                <Input id="productImage" type="file" accept="image/*" onChange={handleImageUpload} disabled={isLoading} />
+                <input type="hidden" {...register("imageUrl")} />
+                {imagePreview && (
+                  <div className="rounded-md border p-2 max-w-[220px]">
+                    <Image src={imagePreview} alt="preview" width={220} height={160} className="w-full h-40 object-cover rounded" unoptimized />
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><Upload className="size-3" />آپلود تصویر با پیش‌نمایش فوری. (برش دستی در این نسخه پشتیبانی نمی‌شود)</p>
+              </div>
             </FormField>
           </div>
 

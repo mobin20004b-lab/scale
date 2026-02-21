@@ -21,6 +21,11 @@ export const positiveNumberString = z
   .refine((value) => !Number.isNaN(Number(value)), "مقدار باید عددی باشد")
   .refine((value) => Number(value) > 0, "مقدار باید بیشتر از صفر باشد");
 
+const weightedUnitKeywords = ["کیلو", "گرم", "وزن", "kg", "g", "gram", "kilo", "lb", "oz"] as const;
+
+const isWeightedUnit = (unit: string) =>
+  weightedUnitKeywords.some((keyword) => unit.toLowerCase().includes(keyword));
+
 export const productFormSchema = z.object({
   name: requiredText("نام محصول الزامی است"),
   sku: z.string().optional(),
@@ -39,7 +44,27 @@ export const productFormSchema = z.object({
     .refine((value) => value.trim().length > 0, "وزن هر واحد الزامی است")
     .refine((value) => !Number.isNaN(Number(value)), "وزن هر واحد باید عددی باشد")
     .refine((value) => Number(value) >= 0, "وزن هر واحد باید مثبت باشد"),
+  imageUrl: z.string().optional(),
   description: z.string().optional(),
+}).superRefine((data, ctx) => {
+  const unit = data.unit.trim();
+  const weight = Number(data.weightPerUnit);
+
+  if (!isWeightedUnit(unit) && weight > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["weightPerUnit"],
+      message: "برای واحدهای غیر وزنی، وزن هر واحد را صفر وارد کنید",
+    });
+  }
+
+  if (isWeightedUnit(unit) && weight === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["weightPerUnit"],
+      message: "برای واحدهای وزنی، وزن هر واحد باید بیشتر از صفر باشد",
+    });
+  }
 });
 
 export const productPayloadSchema = z.object({
@@ -52,6 +77,7 @@ export const productPayloadSchema = z.object({
   unit: requiredText("واحد اندازه‌گیری الزامی است"),
   minStock: z.coerce.number().min(0, "حداقل موجودی باید مثبت باشد"),
   weightPerUnit: z.coerce.number().min(0, "وزن هر واحد باید مثبت باشد"),
+  imageUrl: optionalNullableText,
   description: optionalNullableText,
 });
 

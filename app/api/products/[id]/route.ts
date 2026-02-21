@@ -21,6 +21,23 @@ export async function PUT(
     const parsed = productPayloadSchema.parse(await request.json());
     const normalizedPrimaryBarcode = parsed.barcode ? normalizeBarcode(parsed.barcode) : null;
 
+    const [duplicateSku, duplicateBarcode] = await Promise.all([
+      parsed.sku
+        ? prisma.product.findFirst({ where: { sku: parsed.sku, id: { not: id } }, select: { id: true } })
+        : null,
+      normalizedPrimaryBarcode?.normalized
+        ? prisma.product.findFirst({ where: { barcode: normalizedPrimaryBarcode.normalized, id: { not: id } }, select: { id: true } })
+        : null,
+    ]);
+
+    if (duplicateSku) {
+      return NextResponse.json({ error: "SKU is already in use" }, { status: 409 });
+    }
+
+    if (duplicateBarcode) {
+      return NextResponse.json({ error: "Barcode is already in use" }, { status: 409 });
+    }
+
     const product = await prisma.$transaction(async (tx) => {
       await tx.productBarcode.updateMany({
         where: { productId: id, status: "ACTIVE" },
@@ -37,6 +54,7 @@ export async function PUT(
           unit: parsed.unit,
           minStock: parsed.minStock,
           weightPerUnit: parsed.weightPerUnit,
+          imageUrl: parsed.imageUrl || null,
           description: parsed.description,
           barcodes: {
             create: [

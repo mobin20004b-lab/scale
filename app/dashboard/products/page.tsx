@@ -36,10 +36,13 @@ export default async function ProductsPage({
       where: whereClause,
       include: {
         barcodes: { where: { status: "ACTIVE" }, select: { code: true, status: true } },
+        stockIns: { select: { createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 },
+        stockOuts: { select: { createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 },
         _count: {
           select: {
             stockIns: true,
             stockOuts: true,
+            warehouseBalances: true,
           },
         },
       },

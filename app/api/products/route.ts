@@ -37,6 +37,23 @@ export async function POST(request: Request) {
 
     const normalizedPrimaryBarcode = parsed.barcode ? normalizeBarcode(parsed.barcode) : null;
 
+    const [duplicateSku, duplicateBarcode] = await Promise.all([
+      parsed.sku
+        ? prisma.product.findUnique({ where: { sku: parsed.sku }, select: { id: true } })
+        : null,
+      normalizedPrimaryBarcode?.normalized
+        ? prisma.product.findUnique({ where: { barcode: normalizedPrimaryBarcode.normalized }, select: { id: true } })
+        : null,
+    ]);
+
+    if (duplicateSku) {
+      return NextResponse.json({ error: "SKU is already in use" }, { status: 409 });
+    }
+
+    if (duplicateBarcode) {
+      return NextResponse.json({ error: "Barcode is already in use" }, { status: 409 });
+    }
+
     const product = await prisma.product.create({
       data: {
         name: parsed.name,
@@ -46,6 +63,7 @@ export async function POST(request: Request) {
         unit: parsed.unit,
         minStock: parsed.minStock,
         weightPerUnit: parsed.weightPerUnit,
+        imageUrl: parsed.imageUrl || null,
         description: parsed.description,
         currentStock: 0,
         barcodes: {
