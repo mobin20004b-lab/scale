@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,6 +24,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { stockInFormSchema } from "@/lib/schemas/inventory";
 import { formatScaleWeight } from "@/lib/scale-reading";
 import { EmptyStatePanel } from "@/components/ui/async-state";
+import {
+  focusFirstInvalidField,
+  FormErrorSummary,
+  handleFormKeyboardNavigation,
+  SaveState,
+  SaveStatusInline,
+  useUnsavedChangesGuard,
+} from "@/components/forms/form-utils";
 import {
   Empty,
   EmptyContent,
@@ -78,11 +86,13 @@ export function StockInForm({
   const [scannerStatus, setScannerStatus] = useState<
     "idle" | "scanning" | "success" | "error"
   >("idle");
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const formRef = useRef<HTMLFormElement>(null);
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
+    formState: { errors, isValid, isDirty },
     setValue,
     reset,
     watch,
@@ -100,6 +110,14 @@ export function StockInForm({
   });
 
   const productId = watch("productId");
+  const guard = useUnsavedChangesGuard(isDirty && !isLoading);
+  const errorList = useMemo(
+    () =>
+      Object.values(errors).flatMap((error) =>
+        error?.message ? [error.message] : []
+      ),
+    [errors]
+  );
 
   const filteredScales = useMemo(
     () => scales.filter((scale) => scale.warehouseId === selectedWarehouseId),
@@ -163,6 +181,8 @@ export function StockInForm({
 
   const onSubmit = async (data: StockInFormData) => {
     setIsLoading(true);
+    setSaveState("saving");
+    const toastId = toast.loading("Saving...", { duration: Infinity });
 
     try {
       const response = await fetch("/api/stock-in", {
@@ -179,7 +199,8 @@ export function StockInForm({
       });
 
       if (response.ok) {
-        toast.success("ورود کالا با موفقیت ثبت شد");
+        setSaveState("saved");
+        toast.success("Saved", { id: toastId, duration: 5000 });
         reset();
         setSelectedProduct(null);
         setSelectedWarehouseId("");
@@ -188,10 +209,12 @@ export function StockInForm({
         router.refresh();
       } else {
         const error = await response.json();
-        toast.error(error.error || "خطا در ثبت ورود کالا");
+        setSaveState("failed");
+        toast.error(error.error || "Failed", { id: toastId, duration: 7000 });
       }
     } catch {
-      toast.error("خطا در ثبت ورود کالا");
+      setSaveState("failed");
+      toast.error("Failed", { id: toastId, duration: 7000 });
     } finally {
       setIsLoading(false);
     }
@@ -227,9 +250,20 @@ export function StockInForm({
       </CardHeader>
       <CardContent>
         <form
-          onSubmit={handleSubmit(onSubmit)}
+          ref={formRef}
+          onSubmit={handleSubmit(onSubmit, () =>
+            focusFirstInvalidField(formRef.current)
+          )}
+          onKeyDown={(event) =>
+            handleFormKeyboardNavigation(
+              event,
+              'button[aria-label="باز کردن اسکنر بارکد"]'
+            )
+          }
           className="space-y-4 pb-28 md:pb-0"
         >
+          <FormErrorSummary errors={errorList} />
+          <SaveStatusInline state={saveState} />
           <div className="space-y-2">
             <Label>انبار</Label>
             <Select
@@ -312,6 +346,7 @@ export function StockInForm({
                       type="button"
                       variant="outline"
                       onClick={refreshWeight}
+                      aria-describedby="scale-status-live"
                     >
                       <RefreshCcw className="size-4 ml-2" />
                       تلاش مجدد
@@ -344,6 +379,17 @@ export function StockInForm({
                   استفاده از وزن ترازو
                 </Button>
               </div>
+
+              <p
+                className="sr-only"
+                id="scale-status-live"
+                role="status"
+                aria-live="polite"
+              >
+                {liveWeight !== null
+                  ? `وزن فعلی ${liveWeight}`
+                  : "وزن قابل دریافت نیست"}
+              </p>
 
               {selectedScale && (
                 <div className="text-xs text-muted-foreground">
@@ -420,6 +466,7 @@ export function StockInForm({
               className="text-xs text-center text-muted-foreground mb-2"
               role="status"
               aria-live="polite"
+              id="scanner-status-live"
             >
               {scannerStatus === "scanning" && "در حال اسکن..."}
               {scannerStatus === "success" && "بارکد با موفقیت خوانده شد."}
@@ -449,20 +496,23 @@ export function StockInForm({
               disabled={isLoading}
               dir="ltr"
               placeholder={
-                selectedProduct ? `به ${selectedProduct.unit}` : "مقدار"
+                selectedProduct
+                  ? `مثال: 2.5 ${selectedProduct.unit}`
+                  : "مثال: 2.5"
               }
               aria-invalid={!!errors.quantity}
+              aria-describedby="quantity-hint quantity-error"
               className={cn(
                 errors.quantity &&
                   "border-destructive focus-visible:ring-destructive"
               )}
             />
             {errors.quantity && (
-              <p className="text-sm text-destructive">
+              <p id="quantity-error" className="text-sm text-destructive">
                 {errors.quantity.message}
               </p>
             )}
-            <p className="text-xs text-muted-foreground">
+            <p id="quantity-hint" className="text-xs text-muted-foreground">
               {selectedProduct
                 ? `واحد انتخابی: ${selectedProduct.unit}. مثال: 2.5 ${selectedProduct.unit}`
                 : "پس از انتخاب محصول، واحد و مثال ورود مقدار نمایش داده می‌شود."}
@@ -513,6 +563,17 @@ export function StockInForm({
               {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
               ثبت ورود کالا
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2 w-full"
+              onClick={() => {
+                if (!guard.confirmNavigation()) return;
+                router.push("/dashboard/stock-in");
+              }}
+            >
+              انصراف
+            </Button>
           </div>
 
           <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden">
@@ -524,6 +585,17 @@ export function StockInForm({
             >
               {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
               ثبت ورود کالا
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2 w-full"
+              onClick={() => {
+                if (!guard.confirmNavigation()) return;
+                router.push("/dashboard/stock-in");
+              }}
+            >
+              انصراف
             </Button>
           </div>
         </form>
