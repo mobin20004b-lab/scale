@@ -1,7 +1,10 @@
 import { WarehouseManager } from "@/components/warehouse-manager";
 import { prisma } from "@/lib/prisma";
+import { finalizeDueDeletes } from "@/lib/deletion-lifecycle";
 
 export default async function WarehousesPage() {
+  await finalizeDueDeletes("warehouse");
+
   const warehouses = await prisma.warehouse.findMany({
     include: {
       _count: {

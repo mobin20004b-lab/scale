@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Table,
@@ -56,6 +56,9 @@ interface Product {
     stockIns: number;
     stockOuts: number;
   };
+  deleteRequestedAt?: string | Date | null;
+  deleteCommitAfter?: string | Date | null;
+  deleteConflictAt?: string | Date | null;
 }
 
 interface ProductsTableProps {
@@ -79,19 +82,11 @@ export function ProductsTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [localProducts, setLocalProducts] = useState(products);
-  const pendingDeletes = useRef<Record<string, ReturnType<typeof setTimeout>>>(
-    {}
-  );
 
   useEffect(() => {
     setLocalProducts(products);
   }, [products]);
 
-  useEffect(() => {
-    return () => {
-      Object.values(pendingDeletes.current).forEach(clearTimeout);
-    };
-  }, []);
 
   const hasFilters = Boolean(search || (category && category !== "all"));
 
@@ -125,76 +120,71 @@ export function ProductsTable({
     localProducts.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const rangeEnd = Math.min(currentPage * pageSize, localProducts.length);
 
-  const executeDelete = async (product: Product, rollbackIndex: number) => {
-    const rollback = (reason: string) => {
-      setLocalProducts((previous) => {
-        if (previous.some((item) => item.id === product.id)) {
-          return previous;
-        }
-
-        const next = [...previous];
-        next.splice(Math.min(rollbackIndex, next.length), 0, product);
-        return next;
-      });
-      toast.error(`حذف محصول بازگردانی شد: ${reason}`);
-    };
-
+  const handleDelete = async (product: Product) => {
     try {
       const response = await fetch(`/api/products/${product.id}`, {
         method: "DELETE",
       });
+      const payload = await response.json().catch(() => ({}));
 
-      if (response.ok) {
-        toast.success("محصول با موفقیت حذف شد");
+      if (!response.ok) {
+        toast.error(payload?.error || "خطا در شروع حذف محصول");
+        return;
+      }
+
+      setLocalProducts((previous) =>
+        previous.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                deleteRequestedAt: payload.deleteRequestedAt ?? new Date().toISOString(),
+                deleteCommitAfter: payload.deleteCommitAfter ?? null,
+                deleteConflictAt: payload.deleteConflictAt ?? null,
+              }
+            : item
+        )
+      );
+
+      toast.success("حذف محصول در سرور زمان‌بندی شد. تا قبل از نهایی‌سازی قابل بازیابی است.");
+      router.refresh();
+    } catch {
+      toast.error("ارتباط با سرور برقرار نشد.");
+    }
+  };
+
+  const recoverDelete = async (product: Product) => {
+    try {
+      const response = await fetch(`/api/products/${product.id}/recover`, {
+        method: "POST",
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        toast.error(payload?.error || "بازیابی حذف ناموفق بود");
         router.refresh();
         return;
       }
 
-      const payload = await response.json().catch(() => null);
-      rollback(payload?.error ?? "پاسخ سرویس نامعتبر بود.");
+      setLocalProducts((previous) =>
+        previous.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                deleteRequestedAt: null,
+                deleteCommitAfter: null,
+                deleteConflictAt: null,
+              }
+            : item
+        )
+      );
+      toast.success("حذف محصول از حالت انتظار خارج شد.");
+      router.refresh();
     } catch {
-      rollback("ارتباط با سرور برقرار نشد.");
+      toast.error("خطا در بازیابی حذف محصول");
     }
   };
 
-  const handleDelete = (product: Product) => {
-    const rollbackIndex = localProducts.findIndex(
-      (item) => item.id === product.id
-    );
-
-    setLocalProducts((previous) =>
-      previous.filter((item) => item.id !== product.id)
-    );
-
-    pendingDeletes.current[product.id] = setTimeout(() => {
-      delete pendingDeletes.current[product.id];
-      executeDelete(product, rollbackIndex);
-    }, 5000);
-
-    toast("محصول برای حذف علامت‌گذاری شد", {
-      description: "برای لغو حذف، تا ۵ ثانیه آینده بازگردانی را بزنید.",
-      action: {
-        label: "بازگردانی",
-        onClick: () => {
-          const timer = pendingDeletes.current[product.id];
-          if (timer) {
-            clearTimeout(timer);
-            delete pendingDeletes.current[product.id];
-            setLocalProducts((previous) => {
-              if (previous.some((item) => item.id === product.id)) {
-                return previous;
-              }
-
-              const next = [...previous];
-              next.splice(Math.min(rollbackIndex, next.length), 0, product);
-              return next;
-            });
-            toast.success("حذف محصول لغو شد");
-          }
-        },
-      },
-    });
-  };
+  const isPendingDelete = (product: Product) => Boolean(product.deleteRequestedAt && product.deleteCommitAfter);
 
   const isLowStock = (product: Product) => {
     return Number(product.currentStock) <= Number(product.minStock);
@@ -340,6 +330,7 @@ export function ProductsTable({
                     <TableCell className="font-medium sticky left-0 z-10 bg-background">
                       <div className="flex items-center gap-2">
                         {product.name}
+                        {isPendingDelete(product) && <Badge variant="outline">در انتظار حذف</Badge>}
                         {isLowStock(product) && (
                           <AlertTriangle className="size-4 text-orange-600" />
                         )}
@@ -396,6 +387,7 @@ export function ProductsTable({
                               size="icon"
                               className="size-11 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
                               aria-label={`حذف ${product.name}`}
+                              disabled={isPendingDelete(product)}
                             >
                               <Trash2 className="size-4" />
                             </Button>
@@ -429,12 +421,18 @@ export function ProductsTable({
                               <AlertDialogAction
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                 onClick={() => handleDelete(product)}
+                                disabled={isPendingDelete(product)}
                               >
-                                حذف دائمی
+                                {isPendingDelete(product) ? "حذف زمان‌بندی شده" : "حذف دائمی"}
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
+                        {isPendingDelete(product) && (
+                          <Button variant="secondary" size="sm" onClick={() => recoverDelete(product)}>
+                            بازیابی حذف
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -493,6 +491,7 @@ export function ProductsTable({
                       <div className="space-y-1">
                         <div className="font-semibold flex items-center gap-2 text-base">
                           {product.name}
+                          {isPendingDelete(product) && <Badge variant="outline">در انتظار حذف</Badge>}
                           {isLowStock(product) && (
                             <AlertTriangle className="size-4 text-orange-600" />
                           )}
@@ -563,6 +562,7 @@ export function ProductsTable({
                           size="icon"
                           className="size-11 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
                           aria-label={`حذف ${product.name}`}
+                          disabled={isPendingDelete(product)}
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -600,6 +600,11 @@ export function ProductsTable({
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                    {isPendingDelete(product) && (
+                      <Button variant="secondary" size="sm" onClick={() => recoverDelete(product)}>
+                        بازیابی حذف
+                      </Button>
+                    )}
                   </div>
                 </div>
               );

@@ -5,6 +5,7 @@ import { ZodError } from "zod";
 import { validationErrorResponse } from "@/lib/api-validation";
 import { productPayloadSchema } from "@/lib/schemas/inventory";
 import { normalizeBarcode } from "@/lib/barcode";
+import { requestDelete } from "@/lib/deletion-lifecycle";
 
 export async function PUT(
   request: Request,
@@ -102,27 +103,30 @@ export async function DELETE(
 
     const product = await prisma.product.findUnique({
       where: { id },
+      select: { id: true, name: true },
     });
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    await prisma.product.delete({
-      where: { id },
-    });
+    const result = await requestDelete("product", id);
+
+    if (result.status >= 400) {
+      return NextResponse.json(result.body, { status: result.status });
+    }
 
     await prisma.activity.create({
       data: {
         userId: (guard.session!.user as any).id,
-        action: "حذف محصول",
+        action: "درخواست حذف محصول",
         entity: "Product",
         entityId: product.id,
-        details: `محصول "${product.name}" حذف شد`,
+        details: `حذف محصول "${product.name}" برای پردازش سمت سرور زمان‌بندی شد`,
       },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
     console.error("[v0] Error deleting product:", error);
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });

@@ -3,8 +3,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getScaleHealthSnapshot } from "@/lib/scale-health";
 import { prisma } from "@/lib/prisma";
+import { finalizeDueDeletes } from "@/lib/deletion-lifecycle";
 
 export default async function ScalesPage() {
+  await finalizeDueDeletes("scale");
+
   const [scales, warehouses] = await Promise.all([
     prisma.scale.findMany({
       where: { retiredAt: null },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/route-guards";
 import { prisma } from "@/lib/prisma";
+import { requestDelete } from "@/lib/deletion-lifecycle";
 
 export async function GET(
   request: Request,
@@ -145,49 +146,9 @@ export async function DELETE(
     }
 
     const { id } = await context.params;
-    const scale = await prisma.scale.findUnique({
-      where: { id },
-      select: { id: true, _count: { select: { stockIns: true } } },
-    });
+    const result = await requestDelete("scale", id);
 
-    if (!scale) {
-      return NextResponse.json({ error: "Scale not found" }, { status: 404 });
-    }
-
-    if ((scale._count.stockIns ?? 0) > 0) {
-      await prisma.scale.update({
-        where: { id },
-        data: {
-          isActive: false,
-          archivedAt: new Date(),
-          retiredAt: new Date(),
-          bootstrapToken: null,
-          bootstrapTokenExpiresAt: null,
-          config: null,
-        },
-      });
-
-      return NextResponse.json({
-        success: true,
-        archived: true,
-        message:
-          "این ترازو سابقه تراکنش دارد و برای حفظ تاریخچه آرشیو شد. برای حذف کامل باید ارجاعات تراکنش را پاک کنید.",
-      });
-    }
-
-    await prisma.scale.update({
-      where: { id },
-      data: {
-        isActive: false,
-        archivedAt: new Date(),
-        retiredAt: new Date(),
-        bootstrapToken: null,
-        bootstrapTokenExpiresAt: null,
-        config: null,
-      },
-    });
-
-    return NextResponse.json({ success: true, archived: true, retired: true });
+    return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
     console.error("[v0] Error deleting scale:", error);
     return NextResponse.json(
