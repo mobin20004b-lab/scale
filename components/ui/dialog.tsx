@@ -5,7 +5,12 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { XIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import { shouldPreventDialogDismiss, type DialogCloseBehavior } from '@/lib/dialog-policy'
+import {
+  getFocusWrapTargetIndex,
+  getInitialFocusTarget,
+  shouldPreventDialogDismiss,
+  type DialogCloseBehavior,
+} from '@/lib/dialog-policy'
 
 function Dialog({
   ...props
@@ -47,6 +52,22 @@ function DialogOverlay({
   )
 }
 
+
+function getFocusableElements(container: HTMLElement) {
+  const selectors = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+  ]
+
+  return Array.from(container.querySelectorAll<HTMLElement>(selectors.join(','))).filter(
+    (element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'),
+  )
+}
+
 function DialogContent({
   className,
   children,
@@ -56,6 +77,7 @@ function DialogContent({
   onOpenAutoFocus,
   onEscapeKeyDown,
   onPointerDownOutside,
+  onKeyDown,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
@@ -73,8 +95,8 @@ function DialogContent({
         )}
         onOpenAutoFocus={(event) => {
           if (initialFocusSelector) {
-            const target = event.currentTarget.querySelector<HTMLElement>(initialFocusSelector)
-            if (target) {
+            const target = getInitialFocusTarget(event.currentTarget, initialFocusSelector)
+            if (target instanceof HTMLElement) {
               event.preventDefault()
               target.focus()
             }
@@ -92,6 +114,24 @@ function DialogContent({
             event.preventDefault()
           }
           onPointerDownOutside?.(event)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Tab') {
+            const focusableElements = getFocusableElements(event.currentTarget)
+            const currentIndex = focusableElements.findIndex((item) => item === document.activeElement)
+            const nextIndex = getFocusWrapTargetIndex(
+              currentIndex,
+              focusableElements.length,
+              event.shiftKey ? 'backward' : 'forward',
+            )
+
+            if (nextIndex !== null) {
+              event.preventDefault()
+              focusableElements[nextIndex]?.focus()
+            }
+          }
+
+          onKeyDown?.(event)
         }}
         {...props}
       >
