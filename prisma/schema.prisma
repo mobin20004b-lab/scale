@@ -146,6 +146,11 @@ model Scale {
   id                   String    @id @default(cuid())
   name                 String
   apiKey               String    @unique @default(cuid())
+  bootstrapToken       String?   @unique
+  bootstrapTokenExpiresAt DateTime?
+  enrolledAt           DateTime?
+  retiredAt            DateTime?
+  minFirmwareVersion   String?
   deviceType           ScaleDeviceType @default(ESP32)
   firmwareVersion      String?
   lastSeenAt           DateTime?
@@ -180,6 +185,9 @@ model ScaleCommand {
   payload           Json
   status            ScaleCommandStatus @default(PENDING)
   nonce             String?
+  ackNonce          String?
+  ackNonceExpiresAt DateTime?
+  ackedNonce        String?
   requestedByUserId String?
   sentAt            DateTime?
   ackedAt           DateTime?
@@ -202,6 +210,8 @@ model ScaleTelemetry {
   uptimeSec   Int?
   temperature Float?
   battery     Float?
+  rebootReason String?
+  diagnostics Json?
   payload     Json?
   createdAt   DateTime @default(now())
   scale       Scale    @relation(fields: [scaleId], references: [id], onDelete: Cascade)

@@ -50,6 +50,9 @@ export async function POST(request: Request) {
       printerType,
       printerConnection,
       config,
+      bootstrapToken,
+      bootstrapTokenExpiresAt,
+      minFirmwareVersion,
     } = body;
 
     if (!name?.trim() || !warehouseId) {
@@ -79,6 +82,9 @@ export async function POST(request: Request) {
         printerType: printerType ?? null,
         printerConnection: printerConnection ?? null,
         config: config ?? null,
+        bootstrapToken: typeof bootstrapToken == "string" ? bootstrapToken : null,
+        bootstrapTokenExpiresAt: bootstrapTokenExpiresAt ? new Date(bootstrapTokenExpiresAt) : null,
+        minFirmwareVersion: typeof minFirmwareVersion == "string" ? minFirmwareVersion : null,
       },
       include: {
         warehouse: {

@@ -22,10 +22,14 @@ export async function POST(
 
     const body = await request.json();
     const commandId = String(body?.commandId || "");
+    const ackNonce = String(body?.ackNonce || "");
     const status = body?.status === "FAILED" ? "FAILED" : "ACKED";
 
-    if (!commandId) {
-      return NextResponse.json({ error: "commandId is required" }, { status: 400 });
+    if (!commandId || !ackNonce) {
+      return NextResponse.json(
+        { error: "commandId and ackNonce are required" },
+        { status: 400 }
+      );
     }
 
     const command = await prisma.scaleCommand.findFirst({
@@ -35,11 +39,24 @@ export async function POST(
       return NextResponse.json({ error: "Command not found" }, { status: 404 });
     }
 
+    if (command.ackedNonce) {
+      return NextResponse.json({ error: "Command already acknowledged" }, { status: 409 });
+    }
+
+    if (!command.ackNonce || command.ackNonce !== ackNonce) {
+      return NextResponse.json({ error: "Invalid ack nonce" }, { status: 401 });
+    }
+
+    if (command.ackNonceExpiresAt && command.ackNonceExpiresAt < new Date()) {
+      return NextResponse.json({ error: "Ack nonce expired" }, { status: 401 });
+    }
+
     const updated = await prisma.scaleCommand.update({
       where: { id: commandId },
       data: {
         status,
         ackedAt: new Date(),
+        ackedNonce: ackNonce,
         error: status === "FAILED" ? String(body?.error || "Device failed command") : null,
       },
     });

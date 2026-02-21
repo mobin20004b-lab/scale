@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+const COMMAND_WINDOW_MS = 60 * 1000;
+const MAX_COMMANDS_PER_WINDOW = 20;
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -50,13 +53,32 @@ export async function POST(
     const body = await request.json();
     const type = String(body?.type || "");
 
-    if (!["PRINT_LABEL", "PRINT_TEST", "SET_CONFIG", "RESTART"].includes(type)) {
+    if (!["PRINT_LABEL", "PRINT_TEST", "SET_CONFIG", "RESTART", "RETIRE"].includes(type)) {
       return NextResponse.json({ error: "Invalid command type" }, { status: 400 });
     }
 
-    const scale = await prisma.scale.findUnique({ where: { id }, select: { id: true } });
+    const scale = await prisma.scale.findUnique({
+      where: { id },
+      select: { id: true, retiredAt: true },
+    });
     if (!scale) {
       return NextResponse.json({ error: "Scale not found" }, { status: 404 });
+    }
+    if (scale.retiredAt) {
+      return NextResponse.json({ error: "Scale retired" }, { status: 403 });
+    }
+
+    const commandCount = await prisma.scaleCommand.count({
+      where: {
+        scaleId: id,
+        createdAt: { gte: new Date(Date.now() - COMMAND_WINDOW_MS) },
+      },
+    });
+    if (commandCount >= MAX_COMMANDS_PER_WINDOW) {
+      return NextResponse.json(
+        { error: "Command rate limit exceeded" },
+        { status: 429 }
+      );
     }
 
     const command = await prisma.scaleCommand.create({
