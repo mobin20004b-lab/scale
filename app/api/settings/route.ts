@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireSession } from "@/lib/route-guards"
 import { readSystemSettings, writeSystemSettings } from "@/lib/system-settings"
+import { getUserDashboardAccess } from "@/lib/user-access"
 
 export async function GET() {
   const guard = await requireSession({ adminOnly: true })
@@ -22,15 +23,20 @@ export async function GET() {
     readSystemSettings()
   ])
 
-  return NextResponse.json({
-    settings,
-    users: users.map((user) => ({
+  const usersWithAccess = await Promise.all(
+    users.map(async (user) => ({
       id: user.id,
       name: user.full_name,
       email: user.username,
       role: user.role,
-      active: settings.userActivation[user.id] ?? true
+      active: settings.userActivation[user.id] ?? true,
+      access: await getUserDashboardAccess(user.id, user.role),
     }))
+  )
+
+  return NextResponse.json({
+    settings,
+    users: usersWithAccess,
   })
 }
 

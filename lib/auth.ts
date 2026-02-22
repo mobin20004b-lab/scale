@@ -1,8 +1,9 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient, type UserRole } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { isUserActive } from "@/lib/system-settings"
+import { getUserDashboardAccess } from "@/lib/user-access"
 
 const prisma = new PrismaClient()
 
@@ -40,11 +41,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null
         }
 
+        const access = await getUserDashboardAccess(user.id, user.role)
+
         return {
           id: user.id.toString(),
           name: user.full_name,
           email: user.username,
-          role: user.role
+          role: user.role,
+          access
         }
       }
     })
@@ -54,13 +58,43 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.id = user.id
         token.role = (user as any).role
+        token.access = (user as any).access
       }
+
+      if (!token.id) {
+        return token
+      }
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: token.id as string },
+        select: { id: true, full_name: true, username: true, role: true }
+      })
+
+      if (!dbUser) {
+        return {}
+      }
+
+      const active = await isUserActive(dbUser.id)
+      if (!active) {
+        return {}
+      }
+
+      token.name = dbUser.full_name
+      token.email = dbUser.username
+      token.role = dbUser.role
+      token.access = await getUserDashboardAccess(dbUser.id, dbUser.role as UserRole)
+
       return token
     },
     async session({ session, token }) {
+      if (!token?.id) {
+        return null
+      }
+
       if (session.user) {
         (session.user as any).id = token.id;
         (session.user as any).role = token.role
+        (session.user as any).access = token.access
       }
       return session
     }

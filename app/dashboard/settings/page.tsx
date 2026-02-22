@@ -17,12 +17,20 @@ type UserRole = "ADMIN" | "USER" | "VIEWER"
 type SettingsTab = "users" | "api" | "security" | "general" | "docs"
 type EditableSettingsTab = "api" | "security" | "general"
 
+type UserAccess = {
+  operations: boolean
+  reports: boolean
+  scales: boolean
+  settings: boolean
+}
+
 type UserItem = {
   id: string
   name: string
   email: string
   role: UserRole
   active: boolean
+  access: UserAccess
 }
 
 type SystemSettings = {
@@ -224,6 +232,28 @@ export default function SettingsPage() {
     }
   }
 
+
+  const updateUserAccess = async (id: string, access: UserAccess) => {
+    setUsers((prev) => prev.map((user) => (user.id === id ? { ...user, access } : user)))
+
+    try {
+      const response = await fetch(`/api/settings/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access })
+      })
+
+      if (!response.ok) {
+        throw new Error("access update failed")
+      }
+
+      toast.success("دسترسی کاربر ذخیره شد")
+    } catch {
+      toast.error("ذخیره دسترسی کاربر ناموفق بود")
+      await loadData()
+    }
+  }
+
   const copyText = async (key: string, value: string) => {
     await navigator.clipboard.writeText(value)
     setLastCopied(key)
@@ -388,6 +418,7 @@ export default function SettingsPage() {
                       <th className="text-right p-3">ایمیل</th>
                       <th className="text-right p-3">نقش</th>
                       <th className="text-right p-3">وضعیت</th>
+                      <th className="text-right p-3">دسترسی</th>
                       <th className="text-right p-3">عملیات</th>
                     </tr>
                   </thead>
@@ -398,6 +429,18 @@ export default function SettingsPage() {
                         <td className="p-3" dir="ltr">{user.email}</td>
                         <td className="p-3"><Badge variant="secondary">{user.role}</Badge></td>
                         <td className="p-3"><Badge variant={user.active ? "default" : "secondary"}>{user.active ? "فعال" : "غیرفعال"}</Badge></td>
+                        <td className="p-3">
+                          {user.role === "ADMIN" ? (
+                            <span className="text-xs text-muted-foreground">دسترسی کامل</span>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <label className="inline-flex items-center gap-1"><input type="checkbox" checked={user.access.operations} onChange={(event) => updateUserAccess(user.id, { ...user.access, operations: event.target.checked })} />عملیات</label>
+                              <label className="inline-flex items-center gap-1"><input type="checkbox" checked={user.access.reports} onChange={(event) => updateUserAccess(user.id, { ...user.access, reports: event.target.checked })} />گزارش</label>
+                              <label className="inline-flex items-center gap-1"><input type="checkbox" checked={user.access.scales} onChange={(event) => updateUserAccess(user.id, { ...user.access, scales: event.target.checked })} />ترازو</label>
+                              <label className="inline-flex items-center gap-1"><input type="checkbox" checked={user.access.settings} onChange={(event) => updateUserAccess(user.id, { ...user.access, settings: event.target.checked })} />تنظیمات</label>
+                            </div>
+                          )}
+                        </td>
                         <td className="p-3">
                           <Button variant="outline" size="sm" onClick={() => toggleUser(user.id, !user.active)}>
                             {user.active ? "غیرفعال کردن" : "فعال کردن"}
