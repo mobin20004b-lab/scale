@@ -8,7 +8,7 @@ interface BalanceRow {
 }
 
 export default async function MovementsPage() {
-  const [products, warehouses, balances] = await Promise.all([
+  const [products, warehouses, balances, scales] = await Promise.all([
     prisma.product.findMany({
       include: {
         barcodes: {
@@ -26,6 +26,11 @@ export default async function MovementsPage() {
       SELECT "productId", "warehouseId", "quantity"
       FROM "warehouse_inventory_balances"
     `,
+    prisma.scale.findMany({
+      where: { isActive: true, retiredAt: null },
+      select: { id: true, name: true, warehouseId: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const inventoryByWarehouse = balances.reduce<Record<string, number>>(
@@ -47,6 +52,7 @@ export default async function MovementsPage() {
       <NewMovementForm
         products={products}
         warehouses={warehouses}
+        scales={scales}
         inventoryByWarehouse={inventoryByWarehouse}
       />
     </div>

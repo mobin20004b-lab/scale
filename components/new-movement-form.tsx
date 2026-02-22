@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { findProductByScannedBarcode } from "@/lib/product-barcode";
 import { stockInFormSchema, stockOutFormSchema } from "@/lib/schemas/inventory";
 import { handleFormKeyboardNavigation } from "@/components/forms/form-utils";
+import { BarcodeScanner } from "@/components/barcode-scanner";
 import {
   CheckCircle2,
   ScanLine,
@@ -44,9 +45,16 @@ interface Warehouse {
   name: string;
 }
 
+interface ScaleDevice {
+  id: string;
+  name: string;
+  warehouseId: string;
+}
+
 interface MovementFormProps {
   products: Product[];
   warehouses: Warehouse[];
+  scales: ScaleDevice[];
   inventoryByWarehouse: Record<string, number>;
 }
 
@@ -55,6 +63,7 @@ const DUPLICATE_SCAN_DEBOUNCE_MS = 1200;
 export function NewMovementForm({
   products,
   warehouses,
+  scales,
   inventoryByWarehouse,
 }: MovementFormProps) {
   const router = useRouter();
@@ -79,6 +88,7 @@ export function NewMovementForm({
     id: string;
     mode: MovementMode;
     productName: string;
+    warehouseId: string;
     warehouseName: string;
     quantity: number;
     before: number;
@@ -142,8 +152,8 @@ export function NewMovementForm({
     requestAnimationFrame(() => scannerRef.current?.focus());
   };
 
-  const onScan = async () => {
-    const barcode = scannerInput.trim();
+  const onScan = async (overrideCode?: string) => {
+    const barcode = (overrideCode ?? scannerInput).trim();
     if (!barcode) return;
 
     const normalizedBarcode = barcode.toLowerCase();
@@ -228,6 +238,7 @@ export function NewMovementForm({
         id: data.id,
         mode,
         productName: selectedProduct.name,
+        warehouseId,
         warehouseName,
         quantity: normalizedQty,
         before,
@@ -247,7 +258,7 @@ export function NewMovementForm({
     }
   };
 
-  const printLabel = async () => {
+  const printLabelInBrowser = async () => {
     if (!receipt || receipt.mode !== "stock-in") return;
 
     const response = await fetch("/api/labels", {
@@ -260,13 +271,53 @@ export function NewMovementForm({
       }),
     });
 
-    const data = await response.json();
-    if (!response.ok || !data.url) {
+    const data = (await response.json()) as { error?: string; html?: string };
+    if (!response.ok || !data.html) {
       toast.error(data.error || "چاپ برچسب ناموفق بود.");
       return;
     }
 
-    window.open(data.url, "_blank");
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=960,height=700");
+    if (!printWindow) {
+      toast.error("پنجره چاپ توسط مرورگر مسدود شد.");
+      return;
+    }
+
+    printWindow.document.write(data.html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
+  const printLabelViaEsp32 = async () => {
+    if (!receipt || receipt.mode !== "stock-in") return;
+
+    const scale = scales.find((item) => item.warehouseId === receipt.warehouseId);
+    if (!scale) {
+      toast.error("برای این انبار دستگاه ESP32 فعال پیدا نشد.");
+      return;
+    }
+
+    const response = await fetch(`/api/scales/${scale.id}/commands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "PRINT_LABEL",
+        payload: {
+          source: "stock-in",
+          text: `${receipt.productName} | ${receipt.quantity}`,
+          stockInId: receipt.id,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      toast.error(data.error || "ارسال دستور چاپ به ESP32 ناموفق بود.");
+      return;
+    }
+
+    toast.success(`فرمان چاپ به دستگاه ${scale.name} ارسال شد.`);
   };
 
   return (
@@ -323,6 +374,12 @@ export function NewMovementForm({
                   <ScanLine className="size-4" />
                 </Button>
               </div>
+              <BarcodeScanner
+                onScan={(code) => {
+                  setScannerInput(code);
+                  void onScan(code);
+                }}
+              />
               <Select value={productId} onValueChange={setProductId}>
                 <SelectTrigger>
                   <SelectValue placeholder="یا از لیست انتخاب کنید" />
@@ -449,9 +506,14 @@ export function NewMovementForm({
               {receipt.after.toFixed(2)}
             </p>
             {receipt.mode === "stock-in" && (
-              <Button variant="outline" size="sm" onClick={printLabel}>
-                <Printer className="ml-2 size-4" /> چاپ برچسب
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={printLabelInBrowser}>
+                  <Printer className="ml-2 size-4" /> چاپ در مرورگر
+                </Button>
+                <Button variant="secondary" size="sm" onClick={printLabelViaEsp32}>
+                  <Printer className="ml-2 size-4" /> چاپ با ESP32
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
