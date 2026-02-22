@@ -50,8 +50,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: "محصولات", href: "/dashboard/products", icon: Package },
       { title: "انبارها و نواحی", href: "/dashboard/warehouses", icon: Warehouse },
-      { title: "ردیابی", href: "/dashboard/activity", icon: ScanSearch },
-    ],
+      ],
   },
   {
     title: "تجهیزات و اتوماسیون",
@@ -66,7 +65,6 @@ const navGroups: NavGroup[] = [
     items: [
       { title: "گزارش‌ها", href: "/dashboard/reports", icon: BarChart3 },
       { title: "پایش زنده", href: "/dashboard/scales", icon: Radio, badge: "Live" },
-      { title: "ممیزی و فعالیت", href: "/dashboard/activity", icon: History },
     ],
   },
   {
