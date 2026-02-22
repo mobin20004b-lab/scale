@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../lib/prisma";
-import { decrementWarehouseInventory, incrementWarehouseInventory, InventoryConflictError } from "../../lib/inventory-ledger";
+import {
+  decrementWarehouseInventory,
+  incrementWarehouseInventory,
+  InventoryConflictError,
+} from "../../lib/inventory-ledger";
 
 test("concurrent stock-out requests only allow one winner when stock is limited", async () => {
   const sku = `sku-${Date.now()}-${Math.random()}`;
@@ -24,7 +28,6 @@ test("concurrent stock-out requests only allow one winner when stock is limited"
       name: "Integration Product",
       sku,
       category: "IT",
-      weightPerUnit: 1,
       unit: "pcs",
       minStock: 0,
       currentStock: 0,
@@ -38,6 +41,7 @@ test("concurrent stock-out requests only allow one winner when stock is limited"
       warehouseId: warehouse.id,
       quantity: 1,
       weight: 1,
+      lotBatch: "",
     },
   });
 
@@ -88,8 +92,12 @@ test("concurrent stock-out requests only allow one winner when stock is limited"
 
   assert.equal(Number(balance?.quantity ?? 0), 0);
 
-  await prisma.inventoryLedgerEntry.deleteMany({ where: { productId: product.id } });
-  await prisma.warehouseInventoryBalance.deleteMany({ where: { productId: product.id } });
+  await prisma.inventoryLedgerEntry.deleteMany({
+    where: { productId: product.id },
+  });
+  await prisma.warehouseInventoryBalance.deleteMany({
+    where: { productId: product.id },
+  });
   await prisma.stockIn.deleteMany({ where: { productId: product.id } });
   await prisma.product.delete({ where: { id: product.id } });
   await prisma.warehouse.delete({ where: { id: warehouse.id } });

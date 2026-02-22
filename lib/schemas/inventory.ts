@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PRODUCT_UNITS } from "@/lib/product-units";
 
 const requiredText = (message: string) => z.string().trim().min(1, message);
 
@@ -20,10 +21,9 @@ export const positiveNumberString = z
   .refine((value) => !Number.isNaN(Number(value)), "مقدار باید عددی باشد")
   .refine((value) => Number(value) > 0, "مقدار باید بیشتر از صفر باشد");
 
-const weightedUnitKeywords = ["کیلو", "گرم", "وزن", "kg", "g", "gram", "kilo", "lb", "oz"] as const;
-
-const isWeightedUnit = (unit: string) =>
-  weightedUnitKeywords.some((keyword) => unit.toLowerCase().includes(keyword));
+const productUnitEnum = z.enum(PRODUCT_UNITS, {
+  errorMap: () => ({ message: "واحد اندازه‌گیری نامعتبر است" }),
+});
 
 export const productFormSchema = z.object({
   name: requiredText("نام محصول الزامی است"),
@@ -32,38 +32,17 @@ export const productFormSchema = z.object({
   barcodeAliases: z.string().optional(),
   barcodeIssuer: z.string().optional(),
   category: z.string().optional(),
-  unit: requiredText("واحد اندازه‌گیری الزامی است"),
+  unit: productUnitEnum,
   minStock: z
     .string()
     .refine((value) => value.trim().length > 0, "حداقل موجودی الزامی است")
-    .refine((value) => !Number.isNaN(Number(value)), "حداقل موجودی باید عددی باشد")
+    .refine(
+      (value) => !Number.isNaN(Number(value)),
+      "حداقل موجودی باید عددی باشد"
+    )
     .refine((value) => Number(value) >= 0, "حداقل موجودی باید مثبت باشد"),
-  weightPerUnit: z
-    .string()
-    .refine((value) => value.trim().length > 0, "وزن هر واحد الزامی است")
-    .refine((value) => !Number.isNaN(Number(value)), "وزن هر واحد باید عددی باشد")
-    .refine((value) => Number(value) >= 0, "وزن هر واحد باید مثبت باشد"),
   imageUrl: z.string().optional(),
   description: z.string().optional(),
-}).superRefine((data, ctx) => {
-  const unit = data.unit.trim();
-  const weight = Number(data.weightPerUnit);
-
-  if (!isWeightedUnit(unit) && weight > 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["weightPerUnit"],
-      message: "برای واحدهای غیر وزنی، وزن هر واحد را صفر وارد کنید",
-    });
-  }
-
-  if (isWeightedUnit(unit) && weight === 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["weightPerUnit"],
-      message: "برای واحدهای وزنی، وزن هر واحد باید بیشتر از صفر باشد",
-    });
-  }
 });
 
 export const productPayloadSchema = z.object({
@@ -73,9 +52,8 @@ export const productPayloadSchema = z.object({
   barcodeAliases: z.array(z.string().trim()).optional().default([]),
   barcodeIssuer: optionalNullableText,
   category: optionalText,
-  unit: requiredText("واحد اندازه‌گیری الزامی است"),
+  unit: productUnitEnum,
   minStock: z.coerce.number().min(0, "حداقل موجودی باید مثبت باشد"),
-  weightPerUnit: z.coerce.number().min(0, "وزن هر واحد باید مثبت باشد"),
   imageUrl: optionalNullableText,
   description: optionalNullableText,
 });
@@ -93,7 +71,9 @@ export const stockInFormSchema = z.object({
 export const stockOutFormSchema = z.object({
   productId: requiredText("محصول را انتخاب کنید"),
   warehouseId: requiredText("انبار را انتخاب کنید"),
-  stockInIds: z.array(requiredText("یک ورودی را انتخاب کنید")).min(1, "حداقل یک ورودی را انتخاب کنید"),
+  stockInIds: z
+    .array(requiredText("یک ورودی را انتخاب کنید"))
+    .min(1, "حداقل یک ورودی را انتخاب کنید"),
 });
 
 export const stockInPayloadSchema = z.object({
@@ -106,25 +86,30 @@ export const stockInPayloadSchema = z.object({
   stableWindowMs: z.coerce.number().int().positive().optional().nullable(),
   sourceScaleId: z.string().trim().optional().nullable(),
   confidence: z.coerce.number().min(0).max(1).optional().nullable(),
-  captureSource: z.enum(["current", "stable-average", "auto", "locked", "manual"]).optional().nullable(),
+  captureSource: z
+    .enum(["current", "stable-average", "auto", "locked", "manual"])
+    .optional()
+    .nullable(),
 });
 
-export const stockOutPayloadSchema = z.object({
-  productId: requiredText("محصول را انتخاب کنید"),
-  warehouseId: requiredText("انبار را انتخاب کنید"),
-  stockInId: requiredText("یک ورودی را انتخاب کنید").optional(),
-  stockInIds: z.array(requiredText("یک ورودی را انتخاب کنید")).optional(),
-}).superRefine((data, ctx) => {
-  const selectedIds = data.stockInIds?.filter(Boolean) ?? [];
+export const stockOutPayloadSchema = z
+  .object({
+    productId: requiredText("محصول را انتخاب کنید"),
+    warehouseId: requiredText("انبار را انتخاب کنید"),
+    stockInId: requiredText("یک ورودی را انتخاب کنید").optional(),
+    stockInIds: z.array(requiredText("یک ورودی را انتخاب کنید")).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const selectedIds = data.stockInIds?.filter(Boolean) ?? [];
 
-  if (!data.stockInId && selectedIds.length === 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["stockInIds"],
-      message: "حداقل یک ورودی را انتخاب کنید",
-    });
-  }
-});
+    if (!data.stockInId && selectedIds.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["stockInIds"],
+        message: "حداقل یک ورودی را انتخاب کنید",
+      });
+    }
+  });
 
 export const externalStockInPayloadSchema = stockInPayloadSchema.pick({
   productId: true,
