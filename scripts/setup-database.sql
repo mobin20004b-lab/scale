@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS "products" (
     "description" TEXT,
     "descriptionAr" TEXT,
     "category" TEXT NOT NULL,
-    "weightPerUnit" DOUBLE PRECISION NOT NULL,
     "minStock" DOUBLE PRECISION DEFAULT 0 NOT NULL,
     "maxStock" DOUBLE PRECISION,
     "currentStock" DOUBLE PRECISION DEFAULT 0 NOT NULL,
@@ -107,11 +106,11 @@ VALUES (
 ) ON CONFLICT (email) DO NOTHING;
 
 -- Insert sample products
-INSERT INTO "products" ("id", "name", "nameAr", "sku", "barcode", "category", "weightPerUnit", "minStock", "currentStock", "unit", "updatedAt")
+INSERT INTO "products" ("id", "name", "nameAr", "sku", "barcode", "category", "minStock", "currentStock", "unit", "updatedAt")
 VALUES 
-    (gen_random_uuid()::TEXT, 'Rice Bag', 'كيس أرز', 'RICE-001', '1234567890123', 'حبوب', 5000, 100, 150, 'كيس', CURRENT_TIMESTAMP),
-    (gen_random_uuid()::TEXT, 'Sugar Bag', 'كيس سكر', 'SUGAR-001', '1234567890124', 'سكريات', 2000, 50, 80, 'كيس', CURRENT_TIMESTAMP),
-    (gen_random_uuid()::TEXT, 'Flour Bag', 'كيس دقيق', 'FLOUR-001', '1234567890125', 'حبوب', 1000, 200, 250, 'كيس', CURRENT_TIMESTAMP),
-    (gen_random_uuid()::TEXT, 'Cooking Oil', 'زيت طعام', 'OIL-001', '1234567890126', 'زيوت', 5000, 30, 45, 'علبة', CURRENT_TIMESTAMP),
-    (gen_random_uuid()::TEXT, 'Tea Box', 'علبة شاي', 'TEA-001', '1234567890127', 'مشروبات', 250, 100, 120, 'علبة', CURRENT_TIMESTAMP)
+    (gen_random_uuid()::TEXT, 'Rice Bag', 'كيس أرز', 'RICE-001', '1234567890123', 'حبوب', 100, 150, 'بسته', CURRENT_TIMESTAMP),
+    (gen_random_uuid()::TEXT, 'Sugar Bag', 'كيس سكر', 'SUGAR-001', '1234567890124', 'سكريات', 50, 80, 'بسته', CURRENT_TIMESTAMP),
+    (gen_random_uuid()::TEXT, 'Flour Bag', 'كيس دقيق', 'FLOUR-001', '1234567890125', 'حبوب', 200, 250, 'بسته', CURRENT_TIMESTAMP),
+    (gen_random_uuid()::TEXT, 'Cooking Oil', 'زيت طعام', 'OIL-001', '1234567890126', 'زيوت', 30, 45, 'لیتر', CURRENT_TIMESTAMP),
+    (gen_random_uuid()::TEXT, 'Tea Box', 'علبة شاي', 'TEA-001', '1234567890127', 'مشروبات', 100, 120, 'بسته', CURRENT_TIMESTAMP)
 ON CONFLICT (sku) DO NOTHING;

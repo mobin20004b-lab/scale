@@ -22,7 +22,10 @@ export async function GET() {
 
     return NextResponse.json(products);
   } catch {
-    return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch products" },
+      { status: 500 }
+    );
   }
 }
 
@@ -35,23 +38,37 @@ export async function POST(request: Request) {
 
     const parsed = productPayloadSchema.parse(await request.json());
 
-    const normalizedPrimaryBarcode = parsed.barcode ? normalizeBarcode(parsed.barcode) : null;
+    const normalizedPrimaryBarcode = parsed.barcode
+      ? normalizeBarcode(parsed.barcode)
+      : null;
 
     const [duplicateSku, duplicateBarcode] = await Promise.all([
       parsed.sku
-        ? prisma.product.findUnique({ where: { sku: parsed.sku }, select: { id: true } })
+        ? prisma.product.findUnique({
+            where: { sku: parsed.sku },
+            select: { id: true },
+          })
         : null,
       normalizedPrimaryBarcode?.normalized
-        ? prisma.product.findUnique({ where: { barcode: normalizedPrimaryBarcode.normalized }, select: { id: true } })
+        ? prisma.product.findUnique({
+            where: { barcode: normalizedPrimaryBarcode.normalized },
+            select: { id: true },
+          })
         : null,
     ]);
 
     if (duplicateSku) {
-      return NextResponse.json({ error: "SKU is already in use" }, { status: 409 });
+      return NextResponse.json(
+        { error: "SKU is already in use" },
+        { status: 409 }
+      );
     }
 
     if (duplicateBarcode) {
-      return NextResponse.json({ error: "Barcode is already in use" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Barcode is already in use" },
+        { status: 409 }
+      );
     }
 
     const product = await prisma.product.create({
@@ -62,20 +79,21 @@ export async function POST(request: Request) {
         category: parsed.category || "بدون دسته‌بندی",
         unit: parsed.unit,
         minStock: parsed.minStock,
-        weightPerUnit: parsed.weightPerUnit,
         imageUrl: parsed.imageUrl || null,
         description: parsed.description,
         currentStock: 0,
         barcodes: {
           create: [
             ...(normalizedPrimaryBarcode?.normalized
-              ? [{
-                  code: normalizedPrimaryBarcode.normalized,
-                  identifierType: "PRODUCT_STATIC" as const,
-                  symbology: normalizedPrimaryBarcode.symbology,
-                  issuer: parsed.barcodeIssuer || null,
-                  checksumValid: normalizedPrimaryBarcode.checksumValid,
-                }]
+              ? [
+                  {
+                    code: normalizedPrimaryBarcode.normalized,
+                    identifierType: "PRODUCT_STATIC" as const,
+                    symbology: normalizedPrimaryBarcode.symbology,
+                    issuer: parsed.barcodeIssuer || null,
+                    checksumValid: normalizedPrimaryBarcode.checksumValid,
+                  },
+                ]
               : []),
             ...(parsed.barcodeAliases || []).map((code) => {
               const normalized = normalizeBarcode(code);
@@ -112,6 +130,9 @@ export async function POST(request: Request) {
     }
 
     console.error("[v0] Error creating product:", error);
-    return NextResponse.json({ error: "Failed to create product" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create product" },
+      { status: 500 }
+    );
   }
 }

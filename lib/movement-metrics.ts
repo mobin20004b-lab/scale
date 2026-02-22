@@ -1,6 +1,5 @@
 type ProductMovementProfile = {
   unit?: string | null;
-  weightPerUnit?: number | null;
 };
 
 const WEIGHT_UNITS = new Set([
@@ -34,13 +33,8 @@ export function resolveMovementQuantityAndWeight(
     };
   }
 
-  const weightPerUnit = Number(product.weightPerUnit ?? 0);
-
   return {
     quantity: requestedQuantity,
-    weight:
-      Number.isFinite(weightPerUnit) && weightPerUnit > 0
-        ? requestedQuantity * weightPerUnit
-        : requestedQuantity,
+    weight: requestedQuantity,
   };
 }

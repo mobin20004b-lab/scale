@@ -9,7 +9,7 @@ import { requestDelete } from "@/lib/deletion-lifecycle";
 
 export async function PUT(
   request: Request,
-  context: { params: Promise<{ id: string }> },
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const guard = await requireSession({ adminOnly: true });
@@ -19,23 +19,40 @@ export async function PUT(
 
     const { id } = await context.params;
     const parsed = productPayloadSchema.parse(await request.json());
-    const normalizedPrimaryBarcode = parsed.barcode ? normalizeBarcode(parsed.barcode) : null;
+    const normalizedPrimaryBarcode = parsed.barcode
+      ? normalizeBarcode(parsed.barcode)
+      : null;
 
     const [duplicateSku, duplicateBarcode] = await Promise.all([
       parsed.sku
-        ? prisma.product.findFirst({ where: { sku: parsed.sku, id: { not: id } }, select: { id: true } })
+        ? prisma.product.findFirst({
+            where: { sku: parsed.sku, id: { not: id } },
+            select: { id: true },
+          })
         : null,
       normalizedPrimaryBarcode?.normalized
-        ? prisma.product.findFirst({ where: { barcode: normalizedPrimaryBarcode.normalized, id: { not: id } }, select: { id: true } })
+        ? prisma.product.findFirst({
+            where: {
+              barcode: normalizedPrimaryBarcode.normalized,
+              id: { not: id },
+            },
+            select: { id: true },
+          })
         : null,
     ]);
 
     if (duplicateSku) {
-      return NextResponse.json({ error: "SKU is already in use" }, { status: 409 });
+      return NextResponse.json(
+        { error: "SKU is already in use" },
+        { status: 409 }
+      );
     }
 
     if (duplicateBarcode) {
-      return NextResponse.json({ error: "Barcode is already in use" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Barcode is already in use" },
+        { status: 409 }
+      );
     }
 
     const product = await prisma.$transaction(async (tx) => {
@@ -53,19 +70,20 @@ export async function PUT(
           category: parsed.category || undefined,
           unit: parsed.unit,
           minStock: parsed.minStock,
-          weightPerUnit: parsed.weightPerUnit,
           imageUrl: parsed.imageUrl || null,
           description: parsed.description,
           barcodes: {
             create: [
               ...(normalizedPrimaryBarcode?.normalized
-                ? [{
-                    code: normalizedPrimaryBarcode.normalized,
-                    identifierType: "PRODUCT_STATIC" as const,
-                    symbology: normalizedPrimaryBarcode.symbology,
-                    issuer: parsed.barcodeIssuer || null,
-                    checksumValid: normalizedPrimaryBarcode.checksumValid,
-                  }]
+                ? [
+                    {
+                      code: normalizedPrimaryBarcode.normalized,
+                      identifierType: "PRODUCT_STATIC" as const,
+                      symbology: normalizedPrimaryBarcode.symbology,
+                      issuer: parsed.barcodeIssuer || null,
+                      checksumValid: normalizedPrimaryBarcode.checksumValid,
+                    },
+                  ]
                 : []),
               ...(parsed.barcodeAliases || []).map((code) => {
                 const normalized = normalizeBarcode(code);
@@ -103,13 +121,16 @@ export async function PUT(
     }
 
     console.error("[v0] Error updating product:", error);
-    return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to update product" },
+      { status: 500 }
+    );
   }
 }
 
 export async function DELETE(
   request: Request,
-  context: { params: Promise<{ id: string }> },
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const guard = await requireSession({ adminOnly: true });
@@ -147,6 +168,9 @@ export async function DELETE(
     return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
     console.error("[v0] Error deleting product:", error);
-    return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to delete product" },
+      { status: 500 }
+    );
   }
 }

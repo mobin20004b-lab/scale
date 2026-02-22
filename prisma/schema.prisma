@@ -23,67 +23,66 @@ model User {
 }
 
 model Product {
-  id            String     @id @default(cuid())
-  name          String
-  nameAr        String?
-  sku           String     @unique
-  barcode       String?    @unique
-  qrCode        String?    @unique
-  description   String?
-  descriptionAr String?
-  category      String
-  weightPerUnit Float
-  minStock      Float      @default(0)
-  maxStock      Float?
-  currentStock  Float      @default(0)
-  unit          String     @default("قطعة")
-  imageUrl      String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  deleteRequestedAt DateTime?
-  deleteCommitAfter DateTime?
-  deleteConflictAt DateTime?
+  id                           String                      @id @default(cuid())
+  name                         String
+  nameAr                       String?
+  sku                          String                      @unique
+  barcode                      String?                     @unique
+  qrCode                       String?                     @unique
+  description                  String?
+  descriptionAr                String?
+  category                     String
+  minStock                     Float                       @default(0)
+  maxStock                     Float?
+  currentStock                 Float                       @default(0)
+  unit                         String                      @default("قطعة")
+  imageUrl                     String?
+  createdAt                    DateTime                    @default(now())
+  updatedAt                    DateTime                    @updatedAt
+  deleteRequestedAt            DateTime?
+  deleteCommitAfter            DateTime?
+  deleteConflictAt             DateTime?
   deleteRequestedFromUpdatedAt DateTime?
-  stockIns      StockIn[]
-  stockOuts     StockOut[]
-  warehouseBalances WarehouseInventoryBalance[]
-  inventoryLedgerEntries InventoryLedgerEntry[]
-  barcodes      ProductBarcode[]
-  unknownBarcodeEvents UnknownBarcodeEvent[]
+  stockIns                     StockIn[]
+  stockOuts                    StockOut[]
+  warehouseBalances            WarehouseInventoryBalance[]
+  inventoryLedgerEntries       InventoryLedgerEntry[]
+  barcodes                     ProductBarcode[]
+  unknownBarcodeEvents         UnknownBarcodeEvent[]
 
   @@map("products")
 }
 
 model ProductBarcode {
-  id            String   @id @default(cuid())
-  productId     String
-  code          String   @unique
+  id             String                @id @default(cuid())
+  productId      String
+  code           String                @unique
   identifierType BarcodeIdentifierType @default(PRODUCT_STATIC)
-  symbology     BarcodeSymbology @default(CODE_128)
-  status        BarcodeStatus @default(ACTIVE)
-  issuer        String?
-  generatedAt   DateTime @default(now())
-  checksumValid Boolean?
-  retiredAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  symbology      BarcodeSymbology      @default(CODE_128)
+  status         BarcodeStatus         @default(ACTIVE)
+  issuer         String?
+  generatedAt    DateTime              @default(now())
+  checksumValid  Boolean?
+  retiredAt      DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  product        Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId, status])
   @@map("product_barcodes")
 }
 
 model UnknownBarcodeEvent {
-  id             String   @id @default(cuid())
-  rawCode        String
-  normalizedCode String
-  source         String?
-  status         UnknownBarcodeStatus @default(OPEN)
-  notes          String?
+  id              String               @id @default(cuid())
+  rawCode         String
+  normalizedCode  String
+  source          String?
+  status          UnknownBarcodeStatus @default(OPEN)
+  notes           String?
   mappedProductId String?
-  createdAt      DateTime @default(now())
-  resolvedAt     DateTime?
-  mappedProduct  Product? @relation(fields: [mappedProductId], references: [id], onDelete: SetNull)
+  createdAt       DateTime             @default(now())
+  resolvedAt      DateTime?
+  mappedProduct   Product?             @relation(fields: [mappedProductId], references: [id], onDelete: SetNull)
 
   @@index([normalizedCode])
   @@index([status])
@@ -91,28 +90,28 @@ model UnknownBarcodeEvent {
 }
 
 model StockIn {
-  id            String     @id @default(cuid())
-  productId     String
-  userId        String
-  warehouseId   String?
-  scaleId       String?
-  quantity      Float
-  weight        Float
-  scaleWeight   Float?
-  capturedAt    DateTime?
-  stableWindowMs Int?
-  sourceScaleId String?
-  confidence    Float?
-  captureSource String?
-  lotBatch      String
-  date          DateTime   @default(now())
-  createdAt     DateTime   @default(now())
-  product       Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  scale         Scale?     @relation(fields: [scaleId], references: [id])
-  user          User       @relation(fields: [userId], references: [id])
-  warehouse     Warehouse? @relation(fields: [warehouseId], references: [id])
+  id                     String                 @id @default(cuid())
+  productId              String
+  userId                 String
+  warehouseId            String?
+  scaleId                String?
+  quantity               Float
+  weight                 Float
+  scaleWeight            Float?
+  capturedAt             DateTime?
+  stableWindowMs         Int?
+  sourceScaleId          String?
+  confidence             Float?
+  captureSource          String?
+  lotBatch               String
+  date                   DateTime               @default(now())
+  createdAt              DateTime               @default(now())
+  product                Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  scale                  Scale?                 @relation(fields: [scaleId], references: [id])
+  user                   User                   @relation(fields: [userId], references: [id])
+  warehouse              Warehouse?             @relation(fields: [warehouseId], references: [id])
   inventoryLedgerEntries InventoryLedgerEntry[]
-  stockOuts      StockOut[]
+  stockOuts              StockOut[]
 
   @@index([productId])
   @@index([userId])
@@ -123,67 +122,67 @@ model StockIn {
 }
 
 model Warehouse {
-  id          String    @id @default(cuid())
-  name        String
-  location    String?
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deleteRequestedAt DateTime?
-  deleteCommitAfter DateTime?
-  deleteConflictAt DateTime?
+  id                           String                      @id @default(cuid())
+  name                         String
+  location                     String?
+  description                  String?
+  createdAt                    DateTime                    @default(now())
+  updatedAt                    DateTime                    @updatedAt
+  deleteRequestedAt            DateTime?
+  deleteCommitAfter            DateTime?
+  deleteConflictAt             DateTime?
   deleteRequestedFromUpdatedAt DateTime?
-  scales      Scale[]
-  stockIns    StockIn[]
-  stockOuts   StockOut[]
-  inventoryBalances WarehouseInventoryBalance[]
-  inventoryLedgerEntries InventoryLedgerEntry[]
+  scales                       Scale[]
+  stockIns                     StockIn[]
+  stockOuts                    StockOut[]
+  inventoryBalances            WarehouseInventoryBalance[]
+  inventoryLedgerEntries       InventoryLedgerEntry[]
 
   @@map("warehouses")
 }
 
 model Scale {
-  id                   String    @id @default(cuid())
-  name                 String
-  apiKey               String    @unique @default(cuid())
-  bootstrapToken       String?   @unique
-  bootstrapTokenExpiresAt DateTime?
-  enrolledAt           DateTime?
-  retiredAt            DateTime?
-  minFirmwareVersion   String?
-  deviceType           ScaleDeviceType @default(ESP32)
-  firmwareVersion      String?
-  lastSeenAt           DateTime?
-  printerType          PrinterType?
-  printerConnection    Json?
-  config               Json?
-  warehouseId          String
-  tare                 Float     @default(0)
-  unit                 String    @default("گرم")
-  precision            Int       @default(2)
-  locationNote         String?
-  heartbeatIntervalSec Int       @default(1)
-  lastWeight           Float?
-  lastWeightAt         DateTime?
-  isActive             Boolean   @default(true)
-  archivedAt           DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  deleteRequestedAt    DateTime?
-  deleteCommitAfter    DateTime?
-  deleteConflictAt     DateTime?
+  id                           String           @id @default(cuid())
+  name                         String
+  apiKey                       String           @unique @default(cuid())
+  bootstrapToken               String?          @unique
+  bootstrapTokenExpiresAt      DateTime?
+  enrolledAt                   DateTime?
+  retiredAt                    DateTime?
+  minFirmwareVersion           String?
+  deviceType                   ScaleDeviceType  @default(ESP32)
+  firmwareVersion              String?
+  lastSeenAt                   DateTime?
+  printerType                  PrinterType?
+  printerConnection            Json?
+  config                       Json?
+  warehouseId                  String
+  tare                         Float            @default(0)
+  unit                         String           @default("گرم")
+  precision                    Int              @default(2)
+  locationNote                 String?
+  heartbeatIntervalSec         Int              @default(1)
+  lastWeight                   Float?
+  lastWeightAt                 DateTime?
+  isActive                     Boolean          @default(true)
+  archivedAt                   DateTime?
+  createdAt                    DateTime         @default(now())
+  updatedAt                    DateTime         @updatedAt
+  deleteRequestedAt            DateTime?
+  deleteCommitAfter            DateTime?
+  deleteConflictAt             DateTime?
   deleteRequestedFromUpdatedAt DateTime?
-  warehouse            Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  stockIns             StockIn[]
-  commands             ScaleCommand[]
-  telemetries          ScaleTelemetry[]
+  warehouse                    Warehouse        @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stockIns                     StockIn[]
+  commands                     ScaleCommand[]
+  telemetries                  ScaleTelemetry[]
 
   @@index([warehouseId])
   @@map("scales")
 }
 
 model ScaleCommand {
-  id                String   @id @default(cuid())
+  id                String             @id @default(cuid())
   scaleId           String
   type              ScaleCommandType
   payload           Json
@@ -197,9 +196,9 @@ model ScaleCommand {
   ackedAt           DateTime?
   expiresAt         DateTime?
   error             String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  scale             Scale    @relation(fields: [scaleId], references: [id], onDelete: Cascade)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  scale             Scale              @relation(fields: [scaleId], references: [id], onDelete: Cascade)
 
   @@index([scaleId, status, createdAt])
   @@index([requestedByUserId, createdAt])
@@ -207,37 +206,37 @@ model ScaleCommand {
 }
 
 model ScaleTelemetry {
-  id          String   @id @default(cuid())
-  scaleId     String
-  rssi        Int?
-  freeHeap    Int?
-  uptimeSec   Int?
-  temperature Float?
-  battery     Float?
+  id           String   @id @default(cuid())
+  scaleId      String
+  rssi         Int?
+  freeHeap     Int?
+  uptimeSec    Int?
+  temperature  Float?
+  battery      Float?
   rebootReason String?
-  diagnostics Json?
-  payload     Json?
-  createdAt   DateTime @default(now())
-  scale       Scale    @relation(fields: [scaleId], references: [id], onDelete: Cascade)
+  diagnostics  Json?
+  payload      Json?
+  createdAt    DateTime @default(now())
+  scale        Scale    @relation(fields: [scaleId], references: [id], onDelete: Cascade)
 
   @@index([scaleId, createdAt])
   @@map("scale_telemetry")
 }
 
 model StockOut {
-  id            String   @id @default(cuid())
-  productId     String
-  stockInId     String
-  userId        String
-  warehouseId   String?
-  quantity      Float
-  weight        Float
-  date          DateTime @default(now())
-  createdAt     DateTime @default(now())
-  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  stockIn       StockIn  @relation(fields: [stockInId], references: [id])
-  user          User     @relation(fields: [userId], references: [id])
-  warehouse     Warehouse? @relation(fields: [warehouseId], references: [id])
+  id                     String                 @id @default(cuid())
+  productId              String
+  stockInId              String
+  userId                 String
+  warehouseId            String?
+  quantity               Float
+  weight                 Float
+  date                   DateTime               @default(now())
+  createdAt              DateTime               @default(now())
+  product                Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockIn                StockIn                @relation(fields: [stockInId], references: [id])
+  user                   User                   @relation(fields: [userId], references: [id])
+  warehouse              Warehouse?             @relation(fields: [warehouseId], references: [id])
   inventoryLedgerEntries InventoryLedgerEntry[]
 
   @@index([productId])
@@ -289,7 +288,6 @@ enum BarcodeSymbology {
   UNKNOWN
 }
 
-
 enum PrintJobStatus {
   QUEUED
   SENT
@@ -303,9 +301,8 @@ enum UnknownBarcodeStatus {
   MAPPED
 }
 
-
 model PrintJob {
-  id              String   @id @default(cuid())
+  id              String         @id @default(cuid())
   stockInId       String?
   userId          String
   templateVersion String
@@ -313,7 +310,7 @@ model PrintJob {
   status          PrintJobStatus @default(QUEUED)
   payload         Json
   errorMessage    String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime       @default(now())
   sentAt          DateTime?
   failedAt        DateTime?
 
@@ -337,14 +334,14 @@ model IdempotencyRecord {
 }
 
 model WarehouseInventoryBalance {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   productId   String
   warehouseId String
-  lotBatch    String   @default("")
-  quantity    Float    @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  lotBatch    String    @default("")
+  quantity    Float     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   @@unique([productId, warehouseId, lotBatch])
@@ -354,20 +351,20 @@ model WarehouseInventoryBalance {
 }
 
 model InventoryLedgerEntry {
-  id          String @id @default(cuid())
-  productId   String
-  warehouseId String
-  lotBatch    String   @default("")
+  id            String                @id @default(cuid())
+  productId     String
+  warehouseId   String
+  lotBatch      String                @default("")
   quantityDelta Float
-  movementType InventoryMovementType
-  stockInId   String?
-  stockOutId  String?
-  notes       String?
-  createdAt   DateTime @default(now())
-  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  stockIn     StockIn? @relation(fields: [stockInId], references: [id], onDelete: SetNull)
-  stockOut    StockOut? @relation(fields: [stockOutId], references: [id], onDelete: SetNull)
+  movementType  InventoryMovementType
+  stockInId     String?
+  stockOutId    String?
+  notes         String?
+  createdAt     DateTime              @default(now())
+  product       Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse     Warehouse             @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stockIn       StockIn?              @relation(fields: [stockInId], references: [id], onDelete: SetNull)
+  stockOut      StockOut?             @relation(fields: [stockOutId], references: [id], onDelete: SetNull)
 
   @@index([productId, warehouseId, createdAt])
   @@index([movementType, createdAt])

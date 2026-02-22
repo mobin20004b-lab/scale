@@ -7,10 +7,18 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, Upload } from "lucide-react";
 import { productFormSchema } from "@/lib/schemas/inventory";
+import { PRODUCT_UNITS } from "@/lib/product-units";
 import { FormField } from "@/components/forms/form-field";
 import {
   focusFirstInvalidField,
@@ -37,9 +45,15 @@ export function ProductForm({ product }: ProductFormProps) {
     sku: string;
     barcode?: string | null;
   } | null>(null);
-  const [skuValidation, setSkuValidation] = useState<"idle" | "checking" | "unique" | "duplicate">("idle");
-  const [barcodeValidation, setBarcodeValidation] = useState<"idle" | "checking" | "unique" | "duplicate">("idle");
-  const [imagePreview, setImagePreview] = useState<string>(product?.imageUrl || "");
+  const [skuValidation, setSkuValidation] = useState<
+    "idle" | "checking" | "unique" | "duplicate"
+  >("idle");
+  const [barcodeValidation, setBarcodeValidation] = useState<
+    "idle" | "checking" | "unique" | "duplicate"
+  >("idle");
+  const [imagePreview, setImagePreview] = useState<string>(
+    product?.imageUrl || ""
+  );
   const formRef = useRef<HTMLFormElement>(null);
 
   const {
@@ -56,18 +70,18 @@ export function ProductForm({ product }: ProductFormProps) {
           name: product.name,
           sku: product.sku || "",
           barcode: product.barcode || "",
-          barcodeAliases: (product.barcodes || []).map((b: any) => b.code).join(", "),
+          barcodeAliases: (product.barcodes || [])
+            .map((b: any) => b.code)
+            .join(", "),
           barcodeIssuer: "",
           category: product.category || "",
           unit: product.unit,
           minStock: product.minStock.toString(),
-          weightPerUnit: product.weightPerUnit?.toString() || "",
           imageUrl: product.imageUrl || "",
           description: product.description || "",
         }
       : {
           unit: "کیلوگرم",
-          weightPerUnit: "",
           imageUrl: "",
           barcodeAliases: "",
           barcodeIssuer: "",
@@ -92,11 +106,6 @@ export function ProductForm({ product }: ProductFormProps) {
     errors.minStock?.message,
     "مثال: 10.5 (حداقل موجودی قبل از هشدار)"
   );
-  const weightA11y = useFieldA11y(
-    errors.weightPerUnit?.message,
-    "مثال: 250 (گرم برای هر واحد)"
-  );
-
 
   const watchedSku = watch("sku");
   const watchedBarcode = watch("barcode");
@@ -112,7 +121,9 @@ export function ProductForm({ product }: ProductFormProps) {
       setSkuValidation("checking");
       const params = new URLSearchParams({ sku: value });
       if (product?.id) params.set("excludeId", product.id);
-      const response = await fetch(`/api/products/validate?${params.toString()}`);
+      const response = await fetch(
+        `/api/products/validate?${params.toString()}`
+      );
       const payload = await response.json().catch(() => null);
       setSkuValidation(payload?.sku?.exists ? "duplicate" : "unique");
     }, 350);
@@ -131,7 +142,9 @@ export function ProductForm({ product }: ProductFormProps) {
       setBarcodeValidation("checking");
       const params = new URLSearchParams({ barcode: value });
       if (product?.id) params.set("excludeId", product.id);
-      const response = await fetch(`/api/products/validate?${params.toString()}`);
+      const response = await fetch(
+        `/api/products/validate?${params.toString()}`
+      );
       const payload = await response.json().catch(() => null);
       setBarcodeValidation(payload?.barcode?.exists ? "duplicate" : "unique");
     }, 350);
@@ -147,7 +160,10 @@ export function ProductForm({ product }: ProductFormProps) {
     reader.onload = () => {
       const dataUrl = String(reader.result || "");
       setImagePreview(dataUrl);
-      setValue("imageUrl", dataUrl, { shouldDirty: true, shouldValidate: true });
+      setValue("imageUrl", dataUrl, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -197,8 +213,10 @@ export function ProductForm({ product }: ProductFormProps) {
         body: JSON.stringify({
           ...data,
           minStock: parseFloat(data.minStock),
-          weightPerUnit: parseFloat(data.weightPerUnit),
-          barcodeAliases: (data.barcodeAliases || "").split(",").map((item) => item.trim()).filter(Boolean),
+          barcodeAliases: (data.barcodeAliases || "")
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
           barcodeIssuer: data.barcodeIssuer || undefined,
         }),
       });
@@ -284,9 +302,21 @@ export function ProductForm({ product }: ProductFormProps) {
                 disabled={isLoading}
                 dir="ltr"
               />
-              {skuValidation === "checking" && <p className="text-xs text-muted-foreground mt-1">در حال بررسی یکتا بودن...</p>}
-              {skuValidation === "duplicate" && <p className="text-xs text-destructive mt-1">این SKU قبلاً ثبت شده است.</p>}
-              {skuValidation === "unique" && <p className="text-xs text-emerald-600 mt-1">SKU قابل استفاده است.</p>}
+              {skuValidation === "checking" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  در حال بررسی یکتا بودن...
+                </p>
+              )}
+              {skuValidation === "duplicate" && (
+                <p className="text-xs text-destructive mt-1">
+                  این SKU قبلاً ثبت شده است.
+                </p>
+              )}
+              {skuValidation === "unique" && (
+                <p className="text-xs text-emerald-600 mt-1">
+                  SKU قابل استفاده است.
+                </p>
+              )}
             </FormField>
 
             <FormField id="barcode" label="بارکد">
@@ -296,11 +326,22 @@ export function ProductForm({ product }: ProductFormProps) {
                 disabled={isLoading}
                 dir="ltr"
               />
-              {barcodeValidation === "checking" && <p className="text-xs text-muted-foreground mt-1">در حال بررسی یکتا بودن...</p>}
-              {barcodeValidation === "duplicate" && <p className="text-xs text-destructive mt-1">این بارکد قبلاً ثبت شده است.</p>}
-              {barcodeValidation === "unique" && <p className="text-xs text-emerald-600 mt-1">بارکد قابل استفاده است.</p>}
+              {barcodeValidation === "checking" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  در حال بررسی یکتا بودن...
+                </p>
+              )}
+              {barcodeValidation === "duplicate" && (
+                <p className="text-xs text-destructive mt-1">
+                  این بارکد قبلاً ثبت شده است.
+                </p>
+              )}
+              {barcodeValidation === "unique" && (
+                <p className="text-xs text-emerald-600 mt-1">
+                  بارکد قابل استفاده است.
+                </p>
+              )}
             </FormField>
-
 
             <FormField id="barcodeAliases" label="بارکدهای جایگزین">
               <Input
@@ -335,21 +376,37 @@ export function ProductForm({ product }: ProductFormProps) {
               id={unitA11y.inputId}
               label="واحد اندازه‌گیری"
               required
-              helperText="مثال: کیلوگرم، گرم، لیتر"
+              helperText="از لیست واحدهای مجاز انتخاب کنید"
               error={errors.unit?.message}
               success={!!touchedFields.unit && !errors.unit && !!watch("unit")}
               hintId={unitA11y.hintId}
               errorId={unitA11y.errorId}
             >
-              <Input
-                id={unitA11y.inputId}
-                {...register("unit")}
+              <Select
+                value={watch("unit")}
+                onValueChange={(value) =>
+                  setValue("unit", value as ProductFormData["unit"], {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
                 disabled={isLoading}
-                dir="rtl"
-                placeholder="کیلوگرم"
-                aria-invalid={!!errors.unit}
-                aria-describedby={unitA11y.describedBy}
-              />
+              >
+                <SelectTrigger
+                  id={unitA11y.inputId}
+                  aria-invalid={!!errors.unit}
+                  aria-describedby={unitA11y.describedBy}
+                >
+                  <SelectValue placeholder="واحد را انتخاب کنید" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRODUCT_UNITS.map((unit) => (
+                    <SelectItem key={unit} value={unit}>
+                      {unit}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </FormField>
 
             <FormField
@@ -378,46 +435,36 @@ export function ProductForm({ product }: ProductFormProps) {
                 aria-describedby={minStockA11y.describedBy}
               />
             </FormField>
-
-            <FormField
-              id={weightA11y.inputId}
-              label="وزن هر واحد (گرم)"
-              required
-              helperText="مثال: 250 گرم"
-              error={errors.weightPerUnit?.message}
-              success={
-                !!touchedFields.weightPerUnit &&
-                !errors.weightPerUnit &&
-                !!watch("weightPerUnit")
-              }
-              hintId={weightA11y.hintId}
-              errorId={weightA11y.errorId}
-            >
-              <Input
-                id={weightA11y.inputId}
-                type="number"
-                step="0.01"
-                {...register("weightPerUnit")}
-                disabled={isLoading}
-                dir="ltr"
-                placeholder="250"
-                aria-invalid={!!errors.weightPerUnit}
-                aria-describedby={weightA11y.describedBy}
-              />
-            </FormField>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <FormField id="productImage" label="تصویر محصول (اختیاری)">
               <div className="space-y-2">
-                <Input id="productImage" type="file" accept="image/*" onChange={handleImageUpload} disabled={isLoading} />
+                <Input
+                  id="productImage"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={isLoading}
+                />
                 <input type="hidden" {...register("imageUrl")} />
                 {imagePreview && (
                   <div className="rounded-md border p-2 max-w-[220px]">
-                    <Image src={imagePreview} alt="preview" width={220} height={160} className="w-full h-40 object-cover rounded" unoptimized />
+                    <Image
+                      src={imagePreview}
+                      alt="preview"
+                      width={220}
+                      height={160}
+                      className="w-full h-40 object-cover rounded"
+                      unoptimized
+                    />
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground flex items-center gap-1"><Upload className="size-3" />آپلود تصویر با پیش‌نمایش فوری. (برش دستی در این نسخه پشتیبانی نمی‌شود)</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Upload className="size-3" />
+                  آپلود تصویر با پیش‌نمایش فوری. (برش دستی در این نسخه پشتیبانی
+                  نمی‌شود)
+                </p>
               </div>
             </FormField>
           </div>
