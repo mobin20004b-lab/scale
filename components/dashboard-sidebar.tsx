@@ -53,14 +53,6 @@ const navGroups: NavGroup[] = [
       ],
   },
   {
-    title: "تجهیزات و اتوماسیون",
-    items: [
-      { title: "ناوگان ترازوها", href: "/dashboard/scales", icon: Weight },
-      { title: "چاپگرها و لیبل", href: "/dashboard/settings", icon: Printer, badge: "تنظیمات" },
-      { title: "صف نگاشت بارکد", href: "/dashboard/stock-in", icon: Barcode, badge: "ورودی" },
-    ],
-  },
-  {
     title: "برج کنترل",
     items: [
       { title: "گزارش‌ها", href: "/dashboard/reports", icon: BarChart3 },
@@ -70,8 +62,6 @@ const navGroups: NavGroup[] = [
   {
     title: "مدیریت",
     items: [
-      { title: "کاربران و نقش‌ها", href: "/dashboard/settings", icon: Users },
-      { title: "امنیت و کلید API", href: "/dashboard/settings", icon: Shield },
       { title: "تنظیمات سیستم", href: "/dashboard/settings", icon: Settings },
     ],
   },
