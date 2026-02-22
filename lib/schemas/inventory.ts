@@ -93,7 +93,7 @@ export const stockInFormSchema = z.object({
 export const stockOutFormSchema = z.object({
   productId: requiredText("محصول را انتخاب کنید"),
   warehouseId: requiredText("انبار را انتخاب کنید"),
-  stockInId: requiredText("یک ورودی را انتخاب کنید"),
+  stockInIds: z.array(requiredText("یک ورودی را انتخاب کنید")).min(1, "حداقل یک ورودی را انتخاب کنید"),
 });
 
 export const stockInPayloadSchema = z.object({
@@ -112,7 +112,18 @@ export const stockInPayloadSchema = z.object({
 export const stockOutPayloadSchema = z.object({
   productId: requiredText("محصول را انتخاب کنید"),
   warehouseId: requiredText("انبار را انتخاب کنید"),
-  stockInId: requiredText("یک ورودی را انتخاب کنید"),
+  stockInId: requiredText("یک ورودی را انتخاب کنید").optional(),
+  stockInIds: z.array(requiredText("یک ورودی را انتخاب کنید")).optional(),
+}).superRefine((data, ctx) => {
+  const selectedIds = data.stockInIds?.filter(Boolean) ?? [];
+
+  if (!data.stockInId && selectedIds.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["stockInIds"],
+      message: "حداقل یک ورودی را انتخاب کنید",
+    });
+  }
 });
 
 export const externalStockInPayloadSchema = stockInPayloadSchema.pick({

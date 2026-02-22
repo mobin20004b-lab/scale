@@ -17,16 +17,24 @@ export async function POST(request: Request) {
     }
 
     const parsed = stockOutPayloadSchema.parse(await request.json());
+    const selectedStockInIds = Array.from(
+      new Set((parsed.stockInIds?.length ? parsed.stockInIds : parsed.stockInId ? [parsed.stockInId] : []).filter(Boolean))
+    );
 
-    const stockIn = await prisma.stockIn.findUnique({
-      where: { id: parsed.stockInId },
+    const stockIns = await prisma.stockIn.findMany({
+      where: { id: { in: selectedStockInIds } },
+      orderBy: { createdAt: "asc" },
     });
 
-    if (!stockIn) {
-      return NextResponse.json({ error: "Entry lot not found" }, { status: 404 });
+    if (stockIns.length !== selectedStockInIds.length) {
+      return NextResponse.json({ error: "One or more entry lots were not found" }, { status: 404 });
     }
 
-    if (stockIn.productId !== parsed.productId || stockIn.warehouseId !== parsed.warehouseId) {
+    const hasMismatchedLot = stockIns.some(
+      (stockIn) => stockIn.productId !== parsed.productId || stockIn.warehouseId !== parsed.warehouseId
+    );
+
+    if (hasMismatchedLot) {
       return NextResponse.json(
         { error: "Selected entry lot does not belong to selected product/warehouse" },
         { status: 400 }
@@ -34,7 +42,8 @@ export async function POST(request: Request) {
     }
 
     const existingStockOut = await prisma.stockOut.findFirst({
-      where: { stockInId: parsed.stockInId },
+      where: { stockInId: { in: selectedStockInIds } },
+      select: { stockInId: true },
     });
 
     if (existingStockOut) {
@@ -50,40 +59,52 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Warehouse or product not found" }, { status: 404 });
     }
 
-    const stockOut = await prisma.$transaction(async (tx) => {
-      const createdStockOut = await tx.stockOut.create({
-        data: {
-          productId: parsed.productId,
-          stockInId: parsed.stockInId,
-          userId: (session.user as any).id,
-          quantity: stockIn.quantity,
-          weight: stockIn.weight,
-          warehouseId: parsed.warehouseId,
-        },
-      });
+    const createdStockOuts = await prisma.$transaction(async (tx) => {
+      const stockOutRows = [];
 
-      await decrementWarehouseInventory(tx, {
-        productId: parsed.productId,
-        warehouseId: parsed.warehouseId,
-        quantity: stockIn.quantity,
-        lotBatch: stockIn.lotBatch,
-        stockOutId: createdStockOut.id,
-      });
+      for (const stockIn of stockIns) {
+        const createdStockOut = await tx.stockOut.create({
+          data: {
+            productId: parsed.productId,
+            stockInId: stockIn.id,
+            userId: (session.user as any).id,
+            quantity: stockIn.quantity,
+            weight: stockIn.weight,
+            warehouseId: parsed.warehouseId,
+          },
+        });
+
+        await decrementWarehouseInventory(tx, {
+          productId: parsed.productId,
+          warehouseId: parsed.warehouseId,
+          quantity: stockIn.quantity,
+          lotBatch: stockIn.lotBatch,
+          stockOutId: createdStockOut.id,
+        });
+
+        stockOutRows.push(createdStockOut);
+      }
+
+      const totalQuantity = stockIns.reduce((sum, stockIn) => sum + Number(stockIn.quantity), 0);
+      const lotSummary = stockIns.map((stockIn) => stockIn.lotBatch).join(", ");
 
       await tx.activity.create({
         data: {
           userId: (session.user as any).id,
           action: "خروج کالا",
           entity: "StockOut",
-          entityId: createdStockOut.id,
-          details: `${stockIn.quantity} ${product.unit} از "${product.name}" از انبار "${warehouse.name}" خارج شد (lot: ${stockIn.lotBatch})`,
+          entityId: stockOutRows[0].id,
+          details: `${totalQuantity} ${product.unit} از "${product.name}" از انبار "${warehouse.name}" خارج شد (lots: ${lotSummary})`,
         },
       });
 
-      return createdStockOut;
+      return stockOutRows;
     });
 
-    return NextResponse.json(stockOut, { status: 201 });
+    return NextResponse.json({
+      stockOuts: createdStockOuts,
+      count: createdStockOuts.length,
+    }, { status: 201 });
   } catch (error) {
     if (error instanceof ZodError) {
       return validationErrorResponse(error);

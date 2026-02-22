@@ -41,7 +41,20 @@ export async function GET(request: Request) {
       warehouseId,
       lotBatch: { in: balances.map((b) => b.lotBatch) },
     },
-    select: { id: true, lotBatch: true, quantity: true, createdAt: true },
+    select: {
+      id: true,
+      lotBatch: true,
+      quantity: true,
+      weight: true,
+      createdAt: true,
+      capturedAt: true,
+      captureSource: true,
+      confidence: true,
+      stableWindowMs: true,
+      sourceScaleId: true,
+      user: { select: { full_name: true } },
+      scale: { select: { id: true, name: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
 
