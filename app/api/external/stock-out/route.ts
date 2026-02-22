@@ -53,7 +53,12 @@ export async function POST(request: Request) {
         }
 
         try {
-          const stockIn = await prisma.stockIn.findUnique({ where: { id: parsed.stockInId } });
+          const stockInId = parsed.stockInId ?? parsed.stockInIds?.[0];
+          if (!stockInId) {
+            return { status: 400, body: { error: "At least one stockInId is required" } };
+          }
+
+          const stockIn = await prisma.stockIn.findUnique({ where: { id: stockInId } });
           if (!stockIn) return { status: 404, body: { error: "Entry lot not found" } };
 
           const stockOut = await prisma.$transaction(async (tx) => {
@@ -63,7 +68,7 @@ export async function POST(request: Request) {
                 userId: systemUser.id,
                 quantity: stockIn.quantity,
                 weight: stockIn.weight,
-                stockInId: parsed.stockInId,
+                stockInId,
                 warehouseId: parsed.warehouseId,
               },
             });

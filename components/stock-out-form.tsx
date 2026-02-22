@@ -15,27 +15,46 @@ import {
 import { Badge } from "./ui/badge";
 import { toast } from "sonner";
 import { Loader2, Minus } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { DateTimeText } from "@/components/date-time-text";
 
 interface Product { id: string; name: string; unit: string; }
 interface WarehouseItem { id: string; name: string; }
-interface EntryLot { id: string; lotBatch: string; quantity: number; createdAt: string; }
+interface EntryLot {
+  id: string;
+  lotBatch: string;
+  quantity: number;
+  weight: number;
+  createdAt: string;
+  capturedAt?: string | null;
+  captureSource?: string | null;
+  confidence?: number | null;
+  stableWindowMs?: number | null;
+  sourceScaleId?: string | null;
+  user?: { full_name: string };
+  scale?: { id: string; name: string } | null;
+}
 
 export function StockOutForm({ products, warehouses }: { products: Product[]; warehouses: WarehouseItem[]; warehouseAvailability: Record<string, number>; }) {
   const router = useRouter();
   const [productId, setProductId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
-  const [stockInId, setStockInId] = useState("");
+  const [selectedStockInIds, setSelectedStockInIds] = useState<string[]>([]);
   const [entryLots, setEntryLots] = useState<EntryLot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const selectedProduct = useMemo(() => products.find((p) => p.id === productId), [products, productId]);
-  const selectedLot = useMemo(() => entryLots.find((lot) => lot.id === stockInId), [entryLots, stockInId]);
+  const selectedLots = useMemo(
+    () => entryLots.filter((lot) => selectedStockInIds.includes(lot.id)),
+    [entryLots, selectedStockInIds]
+  );
 
   useEffect(() => {
     const load = async () => {
       if (!productId || !warehouseId) {
         setEntryLots([]);
-        setStockInId("");
+        setSelectedStockInIds([]);
         return;
       }
 
@@ -46,22 +65,28 @@ export function StockOutForm({ products, warehouses }: { products: Product[]; wa
         return;
       }
       setEntryLots(payload.entryLots || []);
-      setStockInId("");
+      setSelectedStockInIds([]);
     };
 
     void load();
   }, [productId, warehouseId]);
 
+  const toggleSelection = (lotId: string, checked: boolean) => {
+    setSelectedStockInIds((previous) =>
+      checked ? [...new Set([...previous, lotId])] : previous.filter((id) => id !== lotId)
+    );
+  };
+
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!productId || !warehouseId || !stockInId) return;
+    if (!productId || !warehouseId || selectedStockInIds.length === 0) return;
 
     setIsLoading(true);
     try {
       const response = await fetch("/api/stock-out", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, warehouseId, stockInId }),
+        body: JSON.stringify({ productId, warehouseId, stockInIds: selectedStockInIds }),
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -69,13 +94,15 @@ export function StockOutForm({ products, warehouses }: { products: Product[]; wa
         return;
       }
 
-      toast.success("خروج کالا ثبت شد.");
-      setStockInId("");
+      toast.success(`${payload.count ?? selectedStockInIds.length} خروج کالا ثبت شد.`);
+      setSelectedStockInIds([]);
       router.refresh();
     } finally {
       setIsLoading(false);
     }
   };
+
+  const totalSelectedQuantity = selectedLots.reduce((sum, lot) => sum + Number(lot.quantity), 0);
 
   return (
     <Card>
@@ -99,22 +126,41 @@ export function StockOutForm({ products, warehouses }: { products: Product[]; wa
           </div>
 
           <div className="space-y-2">
-            <Label>ورودی (لات) *</Label>
-            <Select value={stockInId} onValueChange={setStockInId} disabled={!productId || !warehouseId || entryLots.length === 0}>
-              <SelectTrigger><SelectValue placeholder={entryLots.length ? "انتخاب یک ورودی" : "ورودی فعالی وجود ندارد"} /></SelectTrigger>
-              <SelectContent>
-                {entryLots.map((lot) => (
-                  <SelectItem key={lot.id} value={lot.id}>
-                    {lot.lotBatch} - {Number(lot.quantity).toFixed(2)} {selectedProduct?.unit ?? ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>ورودی‌ها (لات) *</Label>
+            <div className="rounded-lg border">
+              <ScrollArea className="h-60 p-3">
+                {entryLots.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">ورودی فعالی وجود ندارد</p>
+                ) : (
+                  <div className="space-y-2">
+                    {entryLots.map((lot) => (
+                      <label key={lot.id} className="block rounded-md border p-3 text-sm cursor-pointer hover:bg-muted/30">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="font-medium">{lot.lotBatch}</p>
+                            <p className="text-muted-foreground">{Number(lot.quantity).toFixed(2)} {selectedProduct?.unit ?? ""}</p>
+                            <p className="text-xs text-muted-foreground">زمان ثبت: <DateTimeText value={lot.createdAt} showTimeZone /></p>
+                            {lot.user?.full_name && <p className="text-xs text-muted-foreground">ثبت‌کننده: {lot.user.full_name}</p>}
+                            {lot.scale?.name && <p className="text-xs text-muted-foreground">ترازو: {lot.scale.name}</p>}
+                            {lot.captureSource && <p className="text-xs text-muted-foreground">منبع: {lot.captureSource}</p>}
+                            {lot.confidence != null && <p className="text-xs text-muted-foreground">اطمینان: {(lot.confidence * 100).toFixed(0)}%</p>}
+                          </div>
+                          <Checkbox
+                            checked={selectedStockInIds.includes(lot.id)}
+                            onCheckedChange={(checked) => toggleSelection(lot.id, Boolean(checked))}
+                          />
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
           </div>
 
-          {selectedLot && <div className="rounded-lg border p-3 text-sm">این خروج کل ورودی <Badge variant="secondary" className="mx-1">{selectedLot.lotBatch}</Badge> را ثبت می‌کند: {Number(selectedLot.quantity).toFixed(2)} {selectedProduct?.unit ?? ""}</div>}
+          {selectedLots.length > 0 && <div className="rounded-lg border p-3 text-sm">{selectedLots.length} لات انتخاب شد <Badge variant="secondary" className="mx-1">{Number(totalSelectedQuantity).toFixed(2)} {selectedProduct?.unit ?? ""}</Badge></div>}
 
-          <Button type="submit" className="w-full" disabled={!stockInId || isLoading}>
+          <Button type="submit" className="w-full" disabled={selectedStockInIds.length === 0 || isLoading}>
             {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}ثبت خروج کالا
           </Button>
         </form>
