@@ -556,30 +556,30 @@ export function ProductsTable({
                           <AlertDialogContent closeBehavior="destructive">
                             <AlertDialogHeader>
                               <AlertDialogTitle>حذف محصول</AlertDialogTitle>
-                              <AlertDialogDescription className="space-y-2">
-                                <span className="block">این عمل غیرقابل بازگشت است.</span>
-                                <span className="block">نام محصول: <strong>{product.name}</strong></span>
-                                <span className="block">کد محصول: <strong>{product.sku || "-"}</strong></span>
-                                <span className="block font-medium text-amber-600 dark:text-amber-400">
-                                  وابستگی‌ها: {product._count?.stockIns ?? 0} ورودی، {product._count?.stockOuts ?? 0} خروج، {product._count?.warehouseBalances ?? 0} موجودی انبار
-                                </span>
-                                {relatedRecords > 0 && (
-                                  <span className="block text-muted-foreground">
-                                    پیشنهاد ایمن‌تر: به‌جای حذف دائمی، از گزینه «آرشیو/مخفی» در بالای جدول استفاده کنید.
-                                  </span>
-                                )}
-                                <div className="space-y-1">
-                                  <span className="block">برای حذف دائمی، نام محصول را تایپ کنید:</span>
-                                  <Input
-                                    value={deleteConfirm[product.id] || ""}
-                                    onChange={(event) =>
-                                      setDeleteConfirm((previous) => ({ ...previous, [product.id]: event.target.value }))
-                                    }
-                                    placeholder={product.name}
-                                  />
-                                </div>
-                              </AlertDialogDescription>
                             </AlertDialogHeader>
+                            <div className="space-y-2 text-sm">
+                              <span className="block text-muted-foreground">این عمل غیرقابل بازگشت است.</span>
+                              <span className="block text-muted-foreground">نام محصول: <strong>{product.name}</strong></span>
+                              <span className="block text-muted-foreground">کد محصول: <strong>{product.sku || "-"}</strong></span>
+                              <span className="block font-medium text-amber-600 dark:text-amber-400">
+                                وابستگی‌ها: {product._count?.stockIns ?? 0} ورودی، {product._count?.stockOuts ?? 0} خروج، {product._count?.warehouseBalances ?? 0} موجودی انبار
+                              </span>
+                              {relatedRecords > 0 && (
+                                <span className="block text-muted-foreground">
+                                  پیشنهاد ایمن‌تر: به‌جای حذف دائمی، از گزینه «آرشیو/مخفی» در بالای جدول استفاده کنید.
+                                </span>
+                              )}
+                              <div className="space-y-1">
+                                <span className="block">برای حذف دائمی، نام محصول را تایپ کنید:</span>
+                                <Input
+                                  value={deleteConfirm[product.id] || ""}
+                                  onChange={(event) =>
+                                    setDeleteConfirm((previous) => ({ ...previous, [product.id]: event.target.value }))
+                                  }
+                                  placeholder={product.name}
+                                />
+                              </div>
+                            </div>
                             <AlertDialogFooter>
                               <AlertDialogCancel>انصراف</AlertDialogCancel>
                               <AlertDialogAction
