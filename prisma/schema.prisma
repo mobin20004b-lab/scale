@@ -18,8 +18,24 @@ model User {
   activities Activity[]
   stockIns   StockIn[]
   stockOuts  StockOut[]
+  accessControl UserAccessControl?
 
   @@map("users")
+}
+
+
+model UserAccessControl {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  canAccessOperations  Boolean  @default(true)
+  canAccessReports     Boolean  @default(true)
+  canAccessScales      Boolean  @default(true)
+  canAccessSettings    Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_access_controls")
 }
 
 model Product {

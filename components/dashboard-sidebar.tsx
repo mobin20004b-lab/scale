@@ -4,6 +4,7 @@ import type { ComponentType, KeyboardEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { hasDashboardAccess } from "@/lib/access-control";
 import {
   Warehouse,
   LayoutDashboard,
@@ -79,6 +80,8 @@ export function DashboardSidebar({
   onNavigate,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
+  const role = (user as any)?.role as string | undefined;
+  const access = (user as any)?.access as Record<string, boolean> | undefined;
 
   const handleNavKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
     const links = Array.from(
@@ -126,10 +129,19 @@ export function DashboardSidebar({
       </div>
 
       <nav className="flex-1 p-4 space-y-4 overflow-y-auto" aria-label="ناوبری داشبورد">
-        {navGroups.map((group) => (
+        {navGroups.map((group) => {
+          const allowedItems = group.items.filter((item) =>
+            item.href ? hasDashboardAccess(item.href, role, access) : true
+          );
+
+          if (allowedItems.length === 0) {
+            return null;
+          }
+
+          return (
           <section key={group.title} className="space-y-1.5">
             <h2 className="px-3 text-xs font-semibold text-muted-foreground">{group.title}</h2>
-            {group.items.map((item) => {
+            {allowedItems.map((item) => {
               const Icon = item.icon;
               const isActive =
                 item.href &&
@@ -163,7 +175,7 @@ export function DashboardSidebar({
               );
             })}
           </section>
-        ))}
+        )})}
       </nav>
 
       <div className="p-4 border-t">

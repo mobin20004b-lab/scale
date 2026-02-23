@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 import { UserRole } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireSession } from "@/lib/route-guards"
+import { getUserDashboardAccess } from "@/lib/user-access"
 
 export async function POST(request: Request) {
   const guard = await requireSession({ adminOnly: true })
@@ -45,7 +46,8 @@ export async function POST(request: Request) {
       name: created.full_name,
       email: created.username,
       role: created.role,
-      active: true
+      active: true,
+      access: await getUserDashboardAccess(created.id, created.role),
     }
   })
 }
